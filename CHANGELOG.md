@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1 (2 November 2026)
+
+The settings app installs the Android app through the same system dialog as the file manager. Calling `apkd-install` directly failed, as it requires the "privileged" group. Clearer error message when the Android app cannot be opened.
+
 ## 1.4.0 (2 November 2026)
 
 New native Sailfish settings app: switch the service on and off, install or update the bundled Android app, open it, hide its launcher icon, see whether the Android relay is alive and correctly set up, and send a test notification.

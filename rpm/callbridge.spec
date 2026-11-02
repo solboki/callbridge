@@ -1,5 +1,5 @@
 Name:           callbridge
-Version:        1.4.0
+Version:        1.4.1
 Release:        1
 Summary:        Forwards native Sailfish OS calls and SMS to Android AppSupport
 License:        GPL-3.0-or-later
@@ -86,6 +86,9 @@ exit 0
 %{_datadir}/icons/hicolor/*/apps/callbridge.png
 
 %changelog
+* Mon Nov 02 2026 Boris Solodki <solboki@solodki.fr> - 1.4.1-1
+- Settings app: the Android app is installed through the system dialog (apkd-install requires privileges).
+
 * Mon Nov 02 2026 Boris Solodki <solboki@solodki.fr> - 1.4.0-1
 - Settings app: switch the service on and off, install and open the Android app, hide its icon.
 - Project icon in the Sailfish OS shape; English and French texts.

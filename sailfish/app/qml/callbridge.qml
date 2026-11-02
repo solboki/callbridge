@@ -40,14 +40,13 @@ ApplicationWindow {
             "Test envoyé : il doit arriver sur la montre en quelques secondes.",
         "Confirm the installation in the dialog, then open the Android app to grant its permissions.":
             "Confirmez l'installation dans la fenêtre, puis ouvrez l'application Android pour accorder ses autorisations.",
-        "Android app installed. Open it to grant its permissions.":
-            "Application Android installée. Ouvrez-la pour accorder ses autorisations.",
         "Installation failed: ": "Échec de l'installation : ",
         "The Android app does not seem to be installed.":
             "L'application Android ne semble pas installée.",
         "Could not find the Android app launcher. Try again in a few seconds.":
             "Lanceur de l'application Android introuvable. Réessayez dans quelques secondes.",
         "Opening the Android app…": "Ouverture de l'application Android…",
+        "Could not open the Android app: ": "Impossible d'ouvrir l'application Android : ",
         "Request sent to the Android app.": "Demande transmise à l'application Android.",
         "Android blocks the notifications of the Callbridge app: open it and allow them, or nothing will reach your watch.":
             "Android bloque les notifications de l'application Callbridge : ouvrez-la et autorisez-les, sinon rien n'arrivera sur la montre.",
@@ -161,15 +160,20 @@ ApplicationWindow {
                             text: (st.relay && st.relay.known ? t("Update Android app")
                                                               : t("Install Android app"))
                                   + (st.apkVersion ? " " + st.apkVersion : "")
-                            onClicked: py.call("backend.install_apk", [], function(r) {
-                                if (r.ok && r.message === "confirm")
+                            onClicked: {
+                                // Same route as tapping the APK in the file manager:
+                                // Sailfish shows its own confirmation dialog. Installing
+                                // directly (apkd-install) needs privileges this app lacks.
+                                if (Qt.openUrlExternally("file://" + st.apk)) {
                                     app.message = t("Confirm the installation in the dialog, then open the Android app to grant its permissions.")
-                                else if (r.ok)
-                                    app.message = t("Android app installed. Open it to grant its permissions.")
-                                else
-                                    app.message = t("Installation failed: ") + r.message
-                                app.refresh()
-                            })
+                                } else {
+                                    py.call("backend.install_apk", [], function(r) {
+                                        app.message = r.ok
+                                            ? t("Confirm the installation in the dialog, then open the Android app to grant its permissions.")
+                                            : t("Installation failed: ") + r.message
+                                    })
+                                }
+                            }
                         }
                         Button {
                             text: t("Open Android app")
@@ -179,8 +183,10 @@ ApplicationWindow {
                                     if (r.ok) app.message = ""
                                     else if (r.message === "not-installed")
                                         app.message = t("The Android app does not seem to be installed.")
-                                    else
+                                    else if (r.message === "no-launcher")
                                         app.message = t("Could not find the Android app launcher. Try again in a few seconds.")
+                                    else
+                                        app.message = t("Could not open the Android app: ") + r.message
                                     app.refresh()
                                 })
                             }

@@ -13,7 +13,6 @@ import glob
 import json
 import os
 import shlex
-import shutil
 import subprocess
 import time
 
@@ -155,14 +154,16 @@ def set_enabled(enabled):
 
 
 def install_apk():
+    """Fallback when QML cannot open the APK itself.
+
+    xdg-open takes the same route as the file manager: Sailfish shows its own
+    confirmation dialog, then installs the app in AppSupport. Calling
+    apkd-install directly is not possible: it requires the "privileged"
+    group, which this app does not have.
+    """
     apk = _bundled_apk()
     if not apk:
         return {"ok": False, "message": "no-apk"}
-    if shutil.which("apkd-install"):
-        code, out = _run("apkd-install", apk, timeout=120)
-        return {"ok": code == 0, "message": out}
-    # Same path as tapping the file in the file manager: Sailfish asks for
-    # confirmation, then installs it in AppSupport.
     try:
         subprocess.Popen(["xdg-open", apk], start_new_session=True)
         return {"ok": True, "message": "confirm"}
@@ -171,18 +172,29 @@ def install_apk():
 
 
 def _launch(path):
+    """Runs the launcher's Exec line. Returns "" on success, else the error."""
     cmd = _desktop_exec(path)
     if not cmd:
-        return False
-    subprocess.Popen(cmd, start_new_session=True)
-    return True
+        return "no Exec line in " + path
+    try:
+        proc = subprocess.Popen(cmd, start_new_session=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                universal_newlines=True)
+    except OSError as exc:
+        return str(exc)
+    try:
+        out, _ = proc.communicate(timeout=3)
+    except subprocess.TimeoutExpired:
+        return ""                              # still running: launched
+    return "" if proc.returncode == 0 else (out.strip() or "exit %d" % proc.returncode)
 
 
 def open_android():
     """Opens the Android app, briefly restoring its icon if it is hidden."""
     path = _android_desktop()
     if path:
-        return {"ok": _launch(path), "message": ""}
+        err = _launch(path)
+        return {"ok": not err, "message": err}
     st = _relay_state()
     if not st.get("alive"):
         return {"ok": False, "message": "not-installed"}
@@ -194,11 +206,11 @@ def open_android():
             break
     if not path:
         return {"ok": False, "message": "no-launcher"}
-    ok = _launch(path)
+    err = _launch(path)
     if st.get("icon_hidden"):
         time.sleep(4)
         _drop({"action": "command", "command": "hide-icon"})
-    return {"ok": ok, "message": ""}
+    return {"ok": not err, "message": err}
 
 
 def set_icon_hidden(hidden):
