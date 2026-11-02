@@ -2,7 +2,7 @@
 # Builds the APK, the source archive and the Sailfish RPM into dist/.
 set -e
 cd "$(dirname "$0")"
-V=1.4.1
+V=1.5.0
 TOP=$(pwd)
 
 sh android/build.sh

@@ -58,10 +58,8 @@ final class Notifier {
             cancel(ctx, key);
         } else if ("command".equals(action)) {
             String cmd = ev.optString("command", "");
-            if ("hide-icon".equals(cmd)) {
-                RelayService.setIconHidden(ctx, true);
-            } else if ("show-icon".equals(cmd)) {
-                RelayService.setIconHidden(ctx, false);
+            if ("uninstall".equals(cmd)) {
+                RelayService.requestUninstall(ctx);
             } else {
                 RelayService.writeState(ctx);
             }

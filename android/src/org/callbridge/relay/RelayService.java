@@ -44,8 +44,6 @@ public class RelayService extends Service {
     static volatile String lastEventTitle = "";
     static volatile boolean running = false;
 
-    /** Component that puts Callbridge in the launcher (can be disabled to hide the icon). */
-    static final String LAUNCHER_ALIAS = "org.callbridge.relay.Launcher";
     private static final long STATE_MS = 30 * 1000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -192,20 +190,23 @@ public class RelayService extends Service {
     // Icon and state, driven by the Sailfish settings app
     // ------------------------------------------------------------------
 
-    static boolean iconHidden(Context ctx) {
-        int st = ctx.getPackageManager().getComponentEnabledSetting(
-                new android.content.ComponentName(ctx, LAUNCHER_ALIAS));
-        return st == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+    /**
+     * Uninstall requested from the Sailfish settings app. Android only lets a
+     * visible screen ask for an uninstall, so the request is stored here and
+     * MainActivity shows Android's uninstall dialog when it opens.
+     */
+    static void requestUninstall(Context ctx) {
+        ctx.getSharedPreferences("callbridge", Context.MODE_PRIVATE).edit()
+                .putLong("uninstall_requested", System.currentTimeMillis()).apply();
     }
 
-    /** Hides or shows the launcher icon without stopping the app. */
-    static void setIconHidden(Context ctx, boolean hidden) {
-        ctx.getPackageManager().setComponentEnabledSetting(
-                new android.content.ComponentName(ctx, LAUNCHER_ALIAS),
-                hidden ? android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-                        : android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
-                android.content.pm.PackageManager.DONT_KILL_APP);
-        writeState(ctx);
+    /** True (once) if an uninstall was requested in the last two minutes. */
+    static boolean takeUninstallRequest(Context ctx) {
+        android.content.SharedPreferences p =
+                ctx.getSharedPreferences("callbridge", Context.MODE_PRIVATE);
+        long at = p.getLong("uninstall_requested", 0);
+        p.edit().remove("uninstall_requested").apply();
+        return at > 0 && System.currentTimeMillis() - at < 120 * 1000L;
     }
 
     private static boolean granted(Context ctx, String perm) {
@@ -227,7 +228,6 @@ public class RelayService extends Service {
             st.put("notifications", Notifier.enabled(ctx));
             st.put("storage", granted(ctx, "android.permission.WRITE_EXTERNAL_STORAGE"));
             st.put("contacts", granted(ctx, "android.permission.READ_CONTACTS"));
-            st.put("icon_hidden", iconHidden(ctx));
             st.put("last_event", lastEventAt);
             st.put("ts", System.currentTimeMillis());
             File d = exchangeDir();

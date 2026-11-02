@@ -43,11 +43,15 @@ ApplicationWindow {
         "Installation failed: ": "Échec de l'installation : ",
         "The Android app does not seem to be installed.":
             "L'application Android ne semble pas installée.",
-        "Could not find the Android app launcher. Try again in a few seconds.":
-            "Lanceur de l'application Android introuvable. Réessayez dans quelques secondes.",
         "Opening the Android app…": "Ouverture de l'application Android…",
         "Could not open the Android app: ": "Impossible d'ouvrir l'application Android : ",
-        "Request sent to the Android app.": "Demande transmise à l'application Android.",
+        "Done. If the icon does not change within a few seconds, restart the home screen or the phone.":
+            "C'est fait. Si l'icône ne change pas d'ici quelques secondes, redémarrez l'écran d'accueil ou le téléphone.",
+        "Could not change the icon: ": "Impossible de modifier l'icône : ",
+        "Uninstall Android app": "Désinstaller l'application Android",
+        "Uninstalling Android app": "Désinstallation de l'application Android",
+        "Confirm the uninstallation in the Android dialog.":
+            "Confirmez la désinstallation dans la fenêtre d'Android.",
         "Android blocks the notifications of the Callbridge app: open it and allow them, or nothing will reach your watch.":
             "Android bloque les notifications de l'application Callbridge : ouvrez-la et autorisez-les, sinon rien n'arrivera sur la montre.",
         "Vibe-coded with Claude Opus 5.5": "Réalisé en vibe coding avec Claude Opus 5.5"
@@ -183,8 +187,6 @@ ApplicationWindow {
                                     if (r.ok) app.message = ""
                                     else if (r.message === "not-installed")
                                         app.message = t("The Android app does not seem to be installed.")
-                                    else if (r.message === "no-launcher")
-                                        app.message = t("Could not find the Android app launcher. Try again in a few seconds.")
                                     else
                                         app.message = t("Could not open the Android app: ") + r.message
                                     app.refresh()
@@ -194,16 +196,40 @@ ApplicationWindow {
                     }
 
                     TextSwitch {
-                        enabled: app.relayAlive
+                        enabled: st.androidLauncher !== undefined && st.androidLauncher !== ""
                         text: t("Hide Android app icon")
                         description: t("The Android app stays installed and running; only its launcher icon disappears.")
-                        checked: st.relay !== undefined && st.relay.icon_hidden === true
+                        checked: st.iconHidden === true
                         automaticCheck: false
                         onClicked: py.call("backend.set_icon_hidden", [!checked], function(r) {
-                            app.message = t("Request sent to the Android app.")
+                            if (r.ok)
+                                app.message = t("Done. If the icon does not change within a few seconds, restart the home screen or the phone.")
+                            else if (r.message === "not-installed")
+                                app.message = t("The Android app does not seem to be installed.")
+                            else
+                                app.message = t("Could not change the icon: ") + r.message
                             app.refresh()
                         })
                     }
+
+                    Button {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        enabled: st.androidLauncher !== undefined && st.androidLauncher !== ""
+                        text: t("Uninstall Android app")
+                        onClicked: remorse.execute(t("Uninstalling Android app"), function() {
+                            app.message = t("Opening the Android app…")
+                            py.call("backend.uninstall_android", [], function(r) {
+                                app.message = r.ok
+                                    ? t("Confirm the uninstallation in the Android dialog.")
+                                    : t("Could not open the Android app: ") + r.message
+                                app.refresh()
+                            })
+                        })
+                    }
+
+                    RemorsePopup { id: remorse }
+
+                    Item { width: 1; height: Theme.paddingMedium }
 
                     SectionHeader { text: t("Test") }
 

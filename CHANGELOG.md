@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0 (2 November 2026)
+
+The Android app opens on its own screen again. Version 1.4 had added a separate launcher entry (an activity-alias) so that the icon could be hidden; AppSupport cannot open such entries and showed the app info page instead.
+
+Hiding the Android icon now works on the Sailfish side, by marking AppSupport's launcher file with `NoDisplay=true`, or by placing a marked copy in `~/.local/share/applications`. The service re-applies it every minute.
+
+New "Uninstall Android app" button in the settings app, which opens Android's uninstall dialog.
+
 ## 1.4.1 (2 November 2026)
 
 The settings app installs the Android app through the same system dialog as the file manager. Calling `apkd-install` directly failed, as it requires the "privileged" group. Clearer error message when the Android app cannot be opened.

@@ -21,6 +21,8 @@ CONF_DIR = os.path.expanduser("~/.config/callbridge")
 DISABLED_FLAG = os.path.join(CONF_DIR, "disabled")
 APK_GLOB = "/usr/share/callbridge/Callbridge-*.apk"
 ANDROID_PACKAGE = "org.callbridge.relay"
+ICON_FLAG = os.path.join(CONF_DIR, "android-icon-hidden")
+OVERRIDE_MARK = "# Callbridge override"   # copies written by the service, not launchers
 DESKTOP_DIRS = ["/usr/share/applications",
                 os.path.expanduser("~/.local/share/applications")]
 STATE_ALIVE_SECONDS = 75   # the Android relay rewrites its state every 30 s
@@ -98,8 +100,9 @@ def _android_desktop():
                 continue
             try:
                 with open(path, encoding="utf-8", errors="replace") as fh:
-                    if ANDROID_PACKAGE in fh.read():
-                        return path
+                    text = fh.read()
+                if ANDROID_PACKAGE in text and OVERRIDE_MARK not in text:
+                    return path
             except OSError:
                 pass
     return ""
@@ -135,6 +138,7 @@ def status():
         "apk": apk,
         "apkVersion": os.path.basename(apk)[len("Callbridge-"):-len(".apk")] if apk else "",
         "androidLauncher": _android_desktop(),
+        "iconHidden": os.path.exists(ICON_FLAG),
     }
 
 
@@ -190,32 +194,47 @@ def _launch(path):
 
 
 def open_android():
-    """Opens the Android app, briefly restoring its icon if it is hidden."""
+    """Opens the Android app through the launcher file AppSupport created.
+
+    A hidden icon only carries NoDisplay=true: the file is still there and
+    its Exec line still works.
+    """
     path = _android_desktop()
-    if path:
-        err = _launch(path)
-        return {"ok": not err, "message": err}
-    st = _relay_state()
-    if not st.get("alive"):
-        return {"ok": False, "message": "not-installed"}
-    _drop({"action": "command", "command": "show-icon"})
-    for _ in range(40):                      # up to 20 s for AppSupport
-        time.sleep(0.5)
-        path = _android_desktop()
-        if path:
-            break
     if not path:
-        return {"ok": False, "message": "no-launcher"}
+        return {"ok": False, "message": "not-installed"}
     err = _launch(path)
-    if st.get("icon_hidden"):
-        time.sleep(4)
-        _drop({"action": "command", "command": "hide-icon"})
     return {"ok": not err, "message": err}
 
 
 def set_icon_hidden(hidden):
-    _drop({"action": "command", "command": "hide-icon" if hidden else "show-icon"})
-    return {"ok": True, "message": ""}
+    """Delegates to the service, which also re-applies it if AppSupport
+    regenerates its launcher files."""
+    code, out = _run("callbridge-daemon", "--icon", "hide" if hidden else "show")
+    try:
+        rep = json.loads(out.splitlines()[-1])
+    except (ValueError, IndexError):
+        return {"ok": False, "message": out or "exit %d" % code}
+    if not rep.get("launchers"):
+        return {"ok": False, "message": "not-installed"}
+    return {"ok": True, "message": rep["launchers"][0]["method"]}
+
+
+def uninstall_android():
+    """Asks the Android app to show Android's uninstall dialog.
+
+    Android only lets an open screen ask for an uninstall: the request is
+    queued through the shared folder, then the app is opened and shows the
+    dialog. Removing an Android app directly would need privileges.
+    """
+    if not _android_desktop():
+        return {"ok": False, "message": "not-installed"}
+    try:
+        os.remove(os.path.join(_drop_dir(), "relay.state"))
+    except OSError:
+        pass
+    _drop({"action": "command", "command": "uninstall"})
+    time.sleep(2.5)                          # let the relay record the request
+    return open_android()
 
 
 def send_test(text):

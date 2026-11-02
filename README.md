@@ -84,7 +84,7 @@ Finally, tap "Don't optimise battery" and exempt Callbridge, so that Android doe
 
 **5. Check.** Back in the Callbridge settings app, the "Android relay" section should show "Active" and "Notifications allowed: yes". Tap "Send test notification": it should reach your watch within a few seconds. Then send yourself a text message from another phone.
 
-**6. Hide the Android icon (optional).** Once everything works, you can turn on "Hide Android app icon" in the settings app. The Android app keeps running; only its icon disappears from the launcher. "Open Android app" still works: it briefly restores the icon, opens the app, then hides it again.
+**6. Hide the Android icon (optional).** Once everything works, you can turn on "Hide Android app icon" in the settings app. The Android app keeps running; only its "Callbridge Android" icon disappears from the launcher. "Open Android app" in the settings app still opens it.
 
 ## The settings app
 
@@ -92,7 +92,11 @@ The Callbridge settings app gathers everything in one screen.
 
 The **Sailfish service** switch turns forwarding on or off. When it is off, the service stays stopped, even after a reboot, until you turn it back on.
 
-The **Android relay** section shows whether the Android app is running and correctly set up. It reads a small status file that the Android app updates every 30 seconds. "Not responding" means the Android app has stopped, or AppSupport is not running. The buttons below install or update the bundled Android app and open it.
+The **Android relay** section shows whether the Android app is running and correctly set up. It reads a small status file that the Android app updates every 30 seconds. "Not responding" means the Android app has stopped, or AppSupport is not running. The buttons below install or update the bundled Android app, open it, hide its icon and uninstall it.
+
+Hiding the icon works on the Sailfish side. AppSupport creates a launcher file (a `.desktop` file) for each Android app. Callbridge adds the standard line `NoDisplay=true` to it, which tells the home screen not to show it. If that file cannot be edited by the user, Callbridge places a marked copy in `~/.local/share/applications` instead. As AppSupport may recreate its launcher files, the service re-applies the setting every minute while it is on.
+
+Uninstalling goes through Android's own dialog. Android only lets an open app ask for an uninstall, so the settings app opens the Android app, which immediately shows the uninstall dialog for you to confirm.
 
 The **Test** button sends a notification through the whole chain, from Sailfish to the watch.
 
@@ -160,17 +164,19 @@ The watch shows a message icon, even for a call. Garmin Connect picks the icon i
 
 Sailfish copies Android notifications into its own notification area. An SMS may therefore appear there twice.
 
-Hiding the Android icon relies on AppSupport removing launcher entries for disabled Android components. This has been designed for, but not yet confirmed on, every Sailfish version.
+Hiding the Android icon relies on the Sailfish home screen honouring `NoDisplay=true`. When the launcher file cannot be edited, it also relies on the home screen reading `~/.local/share/applications`. This has not yet been confirmed on every Sailfish version.
 
 The name under which Sailfish posts missed calls without a category has only been partly checked. If missed calls do not arrive, verbose mode will tell you which name to add to `MISSED_CALL_APPS`.
 
 ## Uninstalling
 
+Uninstall the Android app first, with the "Uninstall Android app" button of the settings app, then the Sailfish package:
+
 ```
 devel-su pkcon remove callbridge
 ```
 
-Then uninstall the "Callbridge Android" app like any Android app, and delete the folder `~/android_storage/Callbridge` and, if you created it, `~/.config/callbridge`.
+Finally, delete the folder `~/android_storage/Callbridge` and `~/.config/callbridge`.
 
 ## Building from source
 

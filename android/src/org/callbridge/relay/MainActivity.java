@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-/** Single screen: relay status, permissions, test notification, icon visibility. */
+/** Single screen: relay status, permissions and test notification. */
 public class MainActivity extends Activity {
 
     private static final String[] PERMS = {
@@ -31,7 +31,6 @@ public class MainActivity extends Activity {
     };
 
     private TextView status;
-    private Button iconBtn;
     private final Handler handler = new Handler();
     private final Runnable refresh = new Runnable() {
         @Override
@@ -124,19 +123,6 @@ public class MainActivity extends Activity {
                 }
             }
         }));
-        iconBtn = button("", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                boolean hide = !RelayService.iconHidden(MainActivity.this);
-                RelayService.setIconHidden(MainActivity.this, hide);
-                toast(hide
-                        ? L.t("Icon hidden. Open Callbridge from the Sailfish settings app.",
-                              "Icône masquée. Ouvrez Callbridge depuis l'application Sailfish.")
-                        : L.t("Icon shown.", "Icône affichée."));
-                updateStatus();
-            }
-        });
-        col.addView(iconBtn);
         col.addView(button(L.t("Restart relay", "Redémarrer le relais"),
                 new View.OnClickListener() {
             @Override
@@ -217,6 +203,16 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         handler.post(refresh);
+        if (RelayService.takeUninstallRequest(this)) {
+            // Android's own uninstall dialog (API 14+); the user confirms there.
+            try {
+                startActivity(new Intent(Intent.ACTION_DELETE,
+                        android.net.Uri.parse("package:" + getPackageName())));
+            } catch (Exception e) {
+                toast(L.t("Cannot open the uninstall dialog.",
+                        "Impossible d'ouvrir la fenêtre de désinstallation."));
+            }
+        }
     }
 
     @Override
@@ -256,8 +252,5 @@ public class MainActivity extends Activity {
             sb.append(L.t("No event received since start.", "Aucun événement reçu depuis le démarrage."));
         }
         status.setText(sb.toString());
-        iconBtn.setText(RelayService.iconHidden(this)
-                ? L.t("Show launcher icon", "Afficher l'icône")
-                : L.t("Hide launcher icon", "Masquer l'icône"));
     }
 }

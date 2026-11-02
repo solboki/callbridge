@@ -7,8 +7,8 @@
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.callbridge.relay"
-    android:versionCode="8"
-    android:versionName="1.4.1">
+    android:versionCode="9"
+    android:versionName="1.5.0">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="25" />
 
@@ -25,21 +25,16 @@
         android:icon="@drawable/ic_launcher"
         android:allowBackup="false">
 
+        <!-- A plain launcher activity: AppSupport cannot open activity-aliases
+             (it falls back to the app info page), so none is used. -->
         <activity android:name=".MainActivity"
-            android:exported="true"
-            android:label="@string/app_name" />
-
-        <!-- Launcher entry, kept separate so that it can be disabled to hide
-             the icon (command "hide-icon" from the Sailfish settings app). -->
-        <activity-alias android:name=".Launcher"
-            android:targetActivity=".MainActivity"
             android:exported="true"
             android:label="@string/launcher_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity-alias>
+        </activity>
 
         <service android:name=".RelayService" android:exported="false" />
 

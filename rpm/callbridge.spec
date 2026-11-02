@@ -1,5 +1,5 @@
 Name:           callbridge
-Version:        1.4.1
+Version:        1.5.0
 Release:        1
 Summary:        Forwards native Sailfish OS calls and SMS to Android AppSupport
 License:        GPL-3.0-or-later
@@ -28,7 +28,7 @@ notifications, so that Garmin Connect (or any other watch companion app)
 can forward them to the wrist.
 
 The package also contains a settings app to switch the service on and off,
-install and open the Android app, and hide its launcher icon.
+install, open and uninstall the Android app, and hide its launcher icon.
 
 Vibe-coded with Claude Opus 5.5 (Anthropic).
 
@@ -86,6 +86,11 @@ exit 0
 %{_datadir}/icons/hicolor/*/apps/callbridge.png
 
 %changelog
+* Mon Nov 02 2026 Boris Solodki <solboki@solodki.fr> - 1.5.0-1
+- Android app opens on its own screen again (no activity-alias).
+- Android icon hidden on the Sailfish side (NoDisplay=true), re-applied by the service.
+- Settings app: uninstall button.
+
 * Mon Nov 02 2026 Boris Solodki <solboki@solodki.fr> - 1.4.1-1
 - Settings app: the Android app is installed through the system dialog (apkd-install requires privileges).
 

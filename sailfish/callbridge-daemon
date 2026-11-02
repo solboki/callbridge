@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 
-VERSION = "1.4.1"
+VERSION = "1.5.0"
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -425,6 +425,131 @@ def cleaner():
 
 
 # --------------------------------------------------------------------------
+# Icône de l'application Android dans le lanceur Sailfish
+#
+# AppSupport crée un raccourci (.desktop) pour chaque application Android.
+# Pour masquer celui de Callbridge, on y ajoute NoDisplay=true, la convention
+# standard des lanceurs. Si le fichier n'est pas modifiable par l'utilisateur,
+# on dépose une copie marquée NoDisplay=true dans ~/.local/share/applications.
+# Comme AppSupport peut régénérer ses raccourcis, le service réapplique le
+# masquage toutes les minutes tant que l'option est active.
+# --------------------------------------------------------------------------
+
+ANDROID_PACKAGE = "org.callbridge.relay"
+ICON_FLAG = os.path.expanduser("~/.config/callbridge/android-icon-hidden")
+SYSTEM_APP_DIRS = ["/usr/share/applications"]
+USER_APP_DIR = os.path.expanduser("~/.local/share/applications")
+OVERRIDE_MARK = "# Callbridge override: hides the Callbridge Android icon"
+
+
+def _read(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def android_launchers():
+    """Raccourcis créés par AppSupport pour l'application Android (hors copies)."""
+    found = []
+    for d in SYSTEM_APP_DIRS + [USER_APP_DIR]:
+        try:
+            names = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for n in names:
+            p = os.path.join(d, n)
+            if n.endswith(".desktop"):
+                text = _read(p)
+                if ANDROID_PACKAGE in text and OVERRIDE_MARK not in text:
+                    found.append(p)
+    return found
+
+
+def with_nodisplay(text, hidden):
+    """Retire toute ligne NoDisplay de [Desktop Entry], puis l'ajoute si besoin."""
+    out, section = [], ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            section = stripped
+        if section == "[Desktop Entry]" and stripped.startswith("NoDisplay="):
+            continue
+        out.append(line)
+        if hidden and stripped == "[Desktop Entry]":
+            out.append("NoDisplay=true")
+    return "\n".join(out) + "\n"
+
+
+def _write(path, text):
+    tmp = path + ".callbridge-tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.rename(tmp, path)
+
+
+def apply_icon(hidden):
+    """Applique l'état voulu ; renvoie un compte rendu (chemins, méthode)."""
+    report = {"hidden": hidden, "launchers": [], "changed": []}
+    originals = android_launchers()
+    names = set()
+    for p in originals:
+        names.add(os.path.basename(p))
+        text = _read(p)
+        if os.access(p, os.W_OK):
+            method = "edited"
+            new = with_nodisplay(text, hidden)
+            if new != text:
+                _write(p, new)
+                report["changed"].append(p)
+        else:
+            method = "override"
+            ov = os.path.join(USER_APP_DIR, os.path.basename(p))
+            if hidden:
+                new = OVERRIDE_MARK + "\n" + with_nodisplay(text, True)
+                if _read(ov) != new:
+                    os.makedirs(USER_APP_DIR, exist_ok=True)
+                    _write(ov, new)
+                    report["changed"].append(ov)
+            elif OVERRIDE_MARK in _read(ov):
+                os.remove(ov)
+                report["changed"].append(ov)
+        report["launchers"].append({"path": p, "method": method})
+    # Copies devenues orphelines (application Android désinstallée)
+    try:
+        for n in os.listdir(USER_APP_DIR):
+            ov = os.path.join(USER_APP_DIR, n)
+            if n not in names and OVERRIDE_MARK in _read(ov):
+                os.remove(ov)
+                report["changed"].append(ov)
+    except OSError:
+        pass
+    return report
+
+
+def set_icon_hidden(hidden):
+    os.makedirs(os.path.dirname(ICON_FLAG), exist_ok=True)
+    if hidden:
+        open(ICON_FLAG, "w").close()
+    elif os.path.exists(ICON_FLAG):
+        os.remove(ICON_FLAG)
+    return apply_icon(hidden)
+
+
+def icon_keeper():
+    while True:
+        if os.path.exists(ICON_FLAG):
+            try:
+                rep = apply_icon(True)
+                if rep["changed"]:
+                    log("icône Android masquée de nouveau:", rep["changed"])
+            except OSError as exc:
+                dbg("masquage impossible:", exc)
+        time.sleep(60)
+
+
+# --------------------------------------------------------------------------
 # Notifications natives (bus de session)
 # --------------------------------------------------------------------------
 
@@ -605,6 +730,17 @@ def main():
     if "--version" in sys.argv:
         print(VERSION)
         return
+    if "--icon" in sys.argv:
+        # callbridge-daemon --icon hide|show|status  (utilisé par l'application de réglage)
+        arg = sys.argv[sys.argv.index("--icon") + 1] if len(sys.argv) > sys.argv.index("--icon") + 1 else "status"
+        if arg in ("hide", "show"):
+            rep = set_icon_hidden(arg == "hide")
+        else:
+            rep = {"hidden": os.path.exists(ICON_FLAG),
+                   "launchers": [{"path": p, "method": "edited" if os.access(p, os.W_OK) else "override"}
+                                 for p in android_launchers()], "changed": []}
+        print(json.dumps(rep))
+        return
     if "--test" in sys.argv:
         drop({"action": "post", "kind": "test", "key": "test",
               "title": "Callbridge", "text": tr("Test from Sailfish OS")})
@@ -619,7 +755,8 @@ def main():
     log("version", VERSION, "- dossier d'échange:", CFG["DROP_DIR"])
     os.makedirs(CFG["DROP_DIR"], exist_ok=True)
 
-    threads = [threading.Thread(target=cleaner, daemon=True)]
+    threads = [threading.Thread(target=cleaner, daemon=True),
+               threading.Thread(target=icon_keeper, daemon=True)]
     threads.append(threading.Thread(target=monitor, daemon=True, args=(
         "session",
         ["type='method_call',interface='org.freedesktop.Notifications',"
