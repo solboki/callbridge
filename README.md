@@ -62,7 +62,7 @@ Finally, developer mode must be enabled (Settings, then Developer tools), and so
 
 ## Installation
 
-Download the latest Sailfish package, `callbridge-X.Y.Z-1.noarch.rpm`, from the repository's "Releases" page. X.Y.Z stands for the version number. The Android app is included in this package.
+Download the latest Sailfish package, `callbridge-X.Y.Z-1.noarch.rpm`, from the [Releases page](https://github.com/solboki/callbridge/releases/latest). X.Y.Z stands for the version number. The Android app is included in this package.
 
 **1. Install the Sailfish package.** In the terminal:
 

@@ -3,7 +3,7 @@ Version:        1.6.0
 Release:        1
 Summary:        Forwards native Sailfish OS calls and SMS to Android AppSupport
 License:        GPL-3.0-or-later
-URL:            https://forum.sailfishos.org/
+URL:            https://github.com/solboki/callbridge
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
 AutoReqProv:    no
