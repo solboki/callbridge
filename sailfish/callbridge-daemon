@@ -1,0 +1,603 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+"""
+callbridge-daemon : passerelle Sailfish OS -> conteneur Android (AppSupport)
+
+Le service écoute deux canaux du bus de messages D-Bus :
+  * le bus de session, où les applications natives publient leurs
+    notifications (SMS, appels manqués, et toute autre catégorie choisie) ;
+  * le bus système, où oFono (la pile téléphonique) annonce les appels
+    entrants, leur décroché et leur fin.
+
+Chaque événement retenu est écrit sous forme d'un petit fichier JSON dans un
+dossier partagé avec le conteneur Android (~/android_storage/Callbridge).
+L'application Android « Callbridge » lit ce dossier et republie l'événement
+comme une notification Android, que l'application compagnon de la montre
+(Garmin Connect, par exemple) transmet au poignet.
+
+Projet réalisé en « vibe coding » avec Claude Opus 5.5 (Anthropic).
+
+Aucune dépendance autre que python3 et dbus-monitor.
+Licence : GPL-3.0-or-later
+"""
+
+import json
+import os
+import queue
+import re
+import subprocess
+import sys
+import threading
+import time
+
+VERSION = "1.3.0"
+
+# --------------------------------------------------------------------------
+# Configuration
+# --------------------------------------------------------------------------
+
+DEFAULTS = {
+    "DROP_DIR": os.path.expanduser("~/android_storage/Callbridge"),
+    "FORWARD_SMS": "1",
+    "FORWARD_MISSED_CALLS": "1",
+    "FORWARD_INCOMING_CALLS": "1",
+    # Catégories de notifications natives supplémentaires (séparées par des
+    # virgules), par exemple : x-nemo.email
+    "EXTRA_CATEGORIES": "",
+    # Noms d'applications natives supplémentaires (champ app_name), par ex.
+    # harbour-fernschreiber
+    "EXTRA_APPS": "",
+    # Noms d'application (champ app_name) sous lesquels Sailfish publie les
+    # SMS et les appels manqués quand la notification ne porte pas de
+    # catégorie (cas observé sur Sailfish OS 5 : app_name='Messages').
+    "SMS_APPS": "Messages,commhistoryd,jolla-messages",
+    "MISSED_CALL_APPS": "Téléphone,Phone,Appels,voicecall-ui,jolla-voicecall",
+    # Durée de vie d'un fichier non consommé, en secondes
+    "STALE_SECONDS": "120",
+    "DEBUG": "0",
+    # Chercher le nom de l'appelant dans le carnet d'adresses (1 = oui)
+    "LOOKUP_CONTACTS": "1",
+    # Bus sur lequel écouter oFono (system en usage normal)
+    "OFONO_BUS": "system",
+}
+
+SMS_CATEGORIES = {"x-nemo.messaging.sms", "x-nemo.messaging.mms",
+                  "x-nemo.messaging.im"}
+MISSED_CALL_CATEGORIES = {"x-nemo.call.missed"}
+# Notifications qui reviennent de notre propre application Android (écho)
+OWN_APP_NAMES = {"callbridge", "org.callbridge.relay"}
+
+
+def load_config():
+    cfg = dict(DEFAULTS)
+    path = os.environ.get(
+        "CALLBRIDGE_CONF",
+        os.path.expanduser("~/.config/callbridge/callbridge.conf"))
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                cfg[key.strip()] = val.strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    for key in DEFAULTS:
+        if key in os.environ:
+            cfg[key] = os.environ[key]
+    cfg["DROP_DIR"] = os.path.expanduser(cfg["DROP_DIR"])
+    return cfg
+
+
+CFG = load_config()
+DEBUG = CFG["DEBUG"] == "1" or "--debug" in sys.argv
+
+
+def log(*args):
+    print("callbridge:", *args, flush=True)
+
+
+def dbg(*args):
+    if DEBUG:
+        log("[debug]", *args)
+
+
+def csv_set(value):
+    return {v.strip() for v in value.split(",") if v.strip()}
+
+
+# --------------------------------------------------------------------------
+# Analyse de la sortie de dbus-monitor
+# --------------------------------------------------------------------------
+
+HEADER_RE = re.compile(
+    r"^(method call|signal|method return|error) time=\S+ sender=(\S+) -> "
+    r"destination=(.*?) serial=\S+(?: reply_serial=\S+)?"
+    r"(?:;? path=(\S+); interface=(\S+); member=(\S+))?")
+
+
+class DictEntry:
+    __slots__ = ("key", "value")
+
+    def __init__(self, key, value):
+        self.key, self.value = key, value
+
+
+VALUE_START_RE = re.compile(
+    r"\s*(?:string|signature|object|u?int(?:16|32|64)|byte|double|boolean|"
+    r"variant|array|dict|struct|unix|\]|\)|\})")
+
+
+def string_ends_here(text, i):
+    """dbus-monitor n'échappe pas les guillemets à l'intérieur des chaînes.
+
+    Un guillemet ne ferme donc la chaîne que s'il termine sa ligne et que la
+    ligne suivante commence par un mot-clé de valeur (ou si c'est la fin).
+    Exemple : le SMS « On dit "midi" ? » reste entier.
+    """
+    j = i + 1
+    while j < len(text) and text[j] in " \t\r":
+        j += 1
+    if j >= len(text):
+        return True
+    if text[j] != "\n":
+        return False
+    rest = text[j + 1:]
+    return not rest.strip() or bool(VALUE_START_RE.match(rest))
+
+
+def tokenize(text):
+    """Découpe le corps d'un message en jetons.
+
+    Les chaînes entre guillemets peuvent contenir des retours à la ligne et
+    des guillemets échappés ; elles sont rendues sous forme ('S', valeur).
+    """
+    tokens = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+            continue
+        if c == '"':
+            i += 1
+            buf = []
+            while i < n:
+                ch = text[i]
+                if ch == '"' and string_ends_here(text, i):
+                    break
+                buf.append(ch)
+                i += 1
+            tokens.append(("S", "".join(buf)))
+            i += 1
+            continue
+        if c in "[]{}()":
+            tokens.append(("P", c))
+            i += 1
+            continue
+        j = i
+        while j < n and not text[j].isspace() and text[j] not in '[]{}()"':
+            j += 1
+        tokens.append(("W", text[i:j]))
+        i = j
+    return tokens
+
+
+class Parser:
+    def __init__(self, tokens):
+        self.t = tokens
+        self.i = 0
+
+    def peek(self):
+        return self.t[self.i] if self.i < len(self.t) else (None, None)
+
+    def take(self):
+        tok = self.peek()
+        self.i += 1
+        return tok
+
+    def parse_all(self):
+        values = []
+        while self.i < len(self.t):
+            values.append(self.value())
+        return values
+
+    def value(self):
+        kind, tok = self.take()
+        if kind != "W":
+            return tok
+        if tok == "string" or tok == "signature":
+            return self.take()[1]
+        if tok == "object":            # object path "..."
+            self.take()
+            return self.take()[1]
+        if tok in ("int16", "uint16", "int32", "uint32", "int64", "uint64",
+                   "byte"):
+            v = self.take()[1]
+            try:
+                return int(v, 0)
+            except (TypeError, ValueError):
+                return v
+        if tok == "double":
+            try:
+                return float(self.take()[1])
+            except (TypeError, ValueError):
+                return None
+        if tok == "boolean":
+            return self.take()[1] == "true"
+        if tok == "variant":
+            return self.value()
+        if tok == "unix":              # unix fd N
+            self.take()
+            self.take()
+            return None
+        if tok == "array":
+            if self.peek() == ("W", "of"):     # array of bytes
+                self.take()
+                self.take()
+                k, v = self.take()
+                if k == "S":
+                    return v
+                depth = 1
+                while depth and self.i < len(self.t):
+                    k, v = self.take()
+                    if (k, v) == ("P", "["):
+                        depth += 1
+                    elif (k, v) == ("P", "]"):
+                        depth -= 1
+                return b""
+            self.take()                        # [
+            items = []
+            while self.peek() not in (("P", "]"), (None, None)):
+                items.append(self.value())
+            self.take()                        # ]
+            if items and all(isinstance(x, DictEntry) for x in items):
+                return {x.key: x.value for x in items}
+            return items
+        if tok == "dict":                      # dict entry(
+            self.take()                        # "entry"
+            self.take()                        # (
+            key = self.value()
+            val = self.value()
+            if self.peek() == ("P", ")"):
+                self.take()
+            return DictEntry(key, val)
+        if tok == "struct":
+            self.take()                        # {
+            items = []
+            while self.peek() not in (("P", "}"), (None, None)):
+                items.append(self.value())
+            self.take()
+            return items
+        return tok
+
+
+def parse_body(text):
+    try:
+        return Parser(tokenize(text)).parse_all()
+    except Exception as exc:  # analyse défensive : on ne plante jamais
+        dbg("échec d'analyse:", exc)
+        return []
+
+
+def monitor(bus, rules, on_message):
+    """Lance dbus-monitor et appelle on_message(header, args) par message.
+
+    Relance automatiquement dbus-monitor s'il s'arrête.
+    """
+    cmd = ["dbus-monitor", "--" + bus] + rules
+    while True:
+        dbg("lancement:", " ".join(cmd))
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            log("dbus-monitor introuvable, arrêt.")
+            sys.exit(1)
+        # Un message n'a pas de marque de fin : on le considère complet quand
+        # le suivant commence ou quand aucune ligne n'arrive pendant 0,3 s.
+        lines = queue.Queue()
+
+        def reader():
+            for ln in proc.stdout:
+                lines.put(ln)
+            lines.put(None)
+
+        threading.Thread(target=reader, daemon=True).start()
+        header, body = None, []
+
+        def flush():
+            try:
+                on_message(header, parse_body("".join(body)))
+            except Exception as exc:
+                log("erreur de traitement:", exc)
+
+        while True:
+            try:
+                line = lines.get(timeout=0.3)
+            except queue.Empty:
+                if header:
+                    flush()
+                    header, body = None, []
+                continue
+            if line is None:
+                break
+            m = HEADER_RE.match(line)
+            if m:
+                if header:
+                    flush()
+                header = {
+                    "type": m.group(1), "sender": m.group(2),
+                    "path": m.group(4), "interface": m.group(5),
+                    "member": m.group(6),
+                }
+                body = []
+            elif header is not None:
+                body.append(line)
+        if header:
+            flush()
+        err = proc.stderr.read().strip()
+        log("dbus-monitor (%s) s'est arrêté (code %s) %s"
+            % (bus, proc.wait(), err))
+        time.sleep(5)
+
+
+# --------------------------------------------------------------------------
+# Dépôt des événements pour le conteneur Android
+# --------------------------------------------------------------------------
+
+_lock = threading.Lock()
+_seq = 0
+
+
+def drop(event):
+    """Écrit un événement de façon atomique (fichier temporaire + renommage)."""
+    global _seq
+    with _lock:
+        _seq += 1
+        d = CFG["DROP_DIR"]
+        os.makedirs(d, exist_ok=True)
+        event["ts"] = int(time.time() * 1000)
+        name = "%d-%04d.json" % (event["ts"], _seq % 10000)
+        tmp = os.path.join(d, "." + name + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(event, fh, ensure_ascii=False)
+        os.chmod(tmp, 0o666)
+        os.rename(tmp, os.path.join(d, name))
+        log("événement déposé:", event.get("action"), event.get("key"),
+            "|", event.get("title", ""))
+
+
+def cleaner():
+    """Supprime les fichiers jamais consommés (application Android arrêtée)."""
+    stale = int(CFG["STALE_SECONDS"])
+    while True:
+        time.sleep(30)
+        d = CFG["DROP_DIR"]
+        try:
+            now = time.time()
+            for f in os.listdir(d):
+                p = os.path.join(d, f)
+                if f.endswith(".json") or f.endswith(".tmp"):
+                    if now - os.path.getmtime(p) > stale:
+                        os.remove(p)
+                        dbg("fichier périmé supprimé:", f)
+        except OSError:
+            pass
+
+
+# --------------------------------------------------------------------------
+# Notifications natives (bus de session)
+# --------------------------------------------------------------------------
+
+_recent = {}
+
+
+def seen_recently(sig, window=8.0):
+    now = time.time()
+    for k in [k for k, t in _recent.items() if now - t > window]:
+        del _recent[k]
+    if sig in _recent:
+        return True
+    _recent[sig] = now
+    return False
+
+
+def on_notify(header, args):
+    if header["type"] != "method call" or header["member"] != "Notify":
+        return
+    if len(args) < 7:
+        dbg("Notify incomplet:", args)
+        return
+    app_name, replaces_id, _icon, summary, body, _actions, hints = args[:7]
+    hints = hints if isinstance(hints, dict) else {}
+    category = str(hints.get("category", ""))
+    summary = str(hints.get("x-nemo-preview-summary") or summary or "")
+    body = str(hints.get("x-nemo-preview-body") or body or "")
+    dbg("Notify app=%r cat=%r résumé=%r corps=%r indices=%s" %
+        (app_name, category, summary, body, sorted(hints.keys())))
+
+    if str(app_name).lower() in OWN_APP_NAMES:
+        return
+    if not summary and not body:
+        return
+
+    app = str(app_name)
+    kind = None
+    by_app = False
+    if category in SMS_CATEGORIES:
+        kind = "sms" if CFG["FORWARD_SMS"] == "1" else None
+    elif category in MISSED_CALL_CATEGORIES:
+        kind = "missed" if CFG["FORWARD_MISSED_CALLS"] == "1" else None
+    elif not category and app in csv_set(CFG["SMS_APPS"]):
+        kind = "sms" if CFG["FORWARD_SMS"] == "1" else None
+    elif not category and app in csv_set(CFG["MISSED_CALL_APPS"]):
+        kind = "missed" if CFG["FORWARD_MISSED_CALLS"] == "1" else None
+        by_app = True
+    elif category in csv_set(CFG["EXTRA_CATEGORIES"]) or \
+            str(app_name) in csv_set(CFG["EXTRA_APPS"]):
+        kind = "other"
+    if not kind:
+        return
+
+    if seen_recently((kind, summary, body)):
+        dbg("doublon ignoré")
+        return
+
+    if kind == "missed" and by_app:
+        # Sans catégorie, on ne sait pas comment le texte est composé :
+        # on le transmet tel que Sailfish l'affiche.
+        title, text = summary or "Téléphone", body
+    elif kind == "missed":
+        title = "Appel manqué"
+        text = summary if not body or body == summary else \
+            "%s : %s" % (summary, body)
+    else:
+        title, text = summary, body
+    drop({"action": "post", "kind": kind,
+          "key": "%s-%s" % (kind, abs(hash((summary, body))) % 10**8),
+          "title": title, "text": text, "app": str(app_name)})
+
+
+# --------------------------------------------------------------------------
+# Appels entrants (oFono, bus système)
+# --------------------------------------------------------------------------
+
+_calls = {}   # chemin de l'appel -> clé de notification
+
+
+CONTACTS_DB = os.path.expanduser(
+    "~/.local/share/system/privileged/Contacts/qtcontacts-sqlite/contacts.db")
+_contacts_warned = False
+
+
+def digits(number):
+    return re.sub(r"\D", "", number or "")
+
+
+def lookup_contact(number):
+    """Cherche le nom d'un numéro dans le carnet d'adresses de Sailfish.
+
+    Le carnet est une base SQLite réservée aux applications « privilégiées » :
+    selon la version du système, le service peut ne pas y avoir accès. Dans
+    ce cas on renvoie une chaîne vide et l'application Android fera la
+    recherche dans sa propre copie des contacts.
+    Comparaison sur les 9 derniers chiffres : 06 12 34 56 78 et
+    +33 6 12 34 56 78 désignent ainsi le même numéro.
+    """
+    global _contacts_warned
+    if CFG.get("LOOKUP_CONTACTS", "1") != "1":
+        return ""
+    want = digits(number)[-9:]
+    if len(want) < 6:
+        return ""
+    try:
+        import sqlite3
+        db = sqlite3.connect("file:%s?mode=ro" % CONTACTS_DB, uri=True,
+                             timeout=1)
+        try:
+            rows = db.execute(
+                "SELECT c.displayLabel, p.phoneNumber FROM PhoneNumbers p "
+                "JOIN Contacts c ON c.contactId = p.contactId").fetchall()
+        finally:
+            db.close()
+    except Exception as exc:
+        if not _contacts_warned:
+            log("carnet Sailfish inaccessible (%s) : la recherche du nom "
+                "sera faite côté Android" % exc)
+            _contacts_warned = True
+        return ""
+    for label, phone in rows:
+        if label and digits(phone)[-9:] == want:
+            dbg("contact trouvé côté Sailfish:", label)
+            return str(label)
+    return ""
+
+
+def call_key(path):
+    return "call-" + re.sub(r"[^A-Za-z0-9]", "_", path)
+
+
+def on_ofono(header, args):
+    if header["type"] != "signal":
+        return
+    member, iface = header["member"], header["interface"]
+
+    if iface == "org.ofono.VoiceCallManager" and member == "CallAdded":
+        if len(args) < 2 or not isinstance(args[1], dict):
+            return
+        path, props = args[0], args[1]
+        state = props.get("State", "")
+        dbg("CallAdded", path, props)
+        if state not in ("incoming", "waiting"):
+            return
+        number = props.get("LineIdentification") or ""
+        if number in ("withheld", ""):
+            number = ""
+        name = props.get("Name") or (lookup_contact(number) if number else "")
+        _calls[path] = call_key(path)
+        label = "Appel entrant" if state == "incoming" else "Double appel"
+        shown = number or "Numéro masqué"
+        if name:
+            title, text = name, "%s · %s" % (label, shown)
+        else:
+            title, text = label, shown
+        drop({"action": "post", "kind": "call", "key": _calls[path],
+              "title": title, "text": text, "label": label,
+              "number": number, "name": name})
+
+    elif iface == "org.ofono.VoiceCallManager" and member == "CallRemoved":
+        path = args[0] if args else header["path"]
+        key = _calls.pop(path, None)
+        if key:
+            drop({"action": "cancel", "kind": "call", "key": key})
+
+    elif iface == "org.ofono.VoiceCall" and member == "PropertyChanged":
+        path = header["path"]
+        if len(args) >= 2 and args[0] == "State" and \
+                args[1] in ("active", "disconnected"):
+            key = _calls.pop(path, None)
+            if key:
+                drop({"action": "cancel", "kind": "call", "key": key})
+
+
+# --------------------------------------------------------------------------
+
+def main():
+    if "--version" in sys.argv:
+        print(VERSION)
+        return
+    if "--test" in sys.argv:
+        drop({"action": "post", "kind": "test", "key": "test",
+              "title": "Callbridge", "text": "Test depuis Sailfish OS"})
+        return
+
+    log("version", VERSION, "- dossier d'échange:", CFG["DROP_DIR"])
+    os.makedirs(CFG["DROP_DIR"], exist_ok=True)
+
+    threads = [threading.Thread(target=cleaner, daemon=True)]
+    threads.append(threading.Thread(target=monitor, daemon=True, args=(
+        "session",
+        ["type='method_call',interface='org.freedesktop.Notifications',"
+         "member='Notify'"],
+        on_notify)))
+    if CFG["FORWARD_INCOMING_CALLS"] == "1":
+        threads.append(threading.Thread(target=monitor, daemon=True, args=(
+            CFG["OFONO_BUS"],
+            ["type='signal',interface='org.ofono.VoiceCallManager'",
+             "type='signal',interface='org.ofono.VoiceCall',"
+             "member='PropertyChanged'"],
+            on_ofono)))
+    for t in threads:
+        t.start()
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

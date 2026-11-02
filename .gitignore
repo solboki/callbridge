@@ -1,0 +1,11 @@
+# Fichiers produits par la construction
+/dist/
+/rpmbuild/
+/android/build/
+/android/Callbridge.apk
+*.idsig
+__pycache__/
+
+# Clé de signature de l'APK : ne jamais la publier
+*.keystore
+*.jks

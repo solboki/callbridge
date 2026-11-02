@@ -1,0 +1,34 @@
+# Configuration de Callbridge
+# Copier ce fichier dans ~/.config/callbridge/callbridge.conf puis relancer :
+#   systemctl --user restart callbridge
+
+# Dossier partagé avec Android (vu comme /sdcard/Callbridge dans le conteneur)
+DROP_DIR=~/android_storage/Callbridge
+
+# 1 = transmettre, 0 = ignorer
+FORWARD_SMS=1
+FORWARD_MISSED_CALLS=1
+FORWARD_INCOMING_CALLS=1
+
+# Noms d'application sous lesquels Sailfish publie SMS et appels manqués
+# (utilisés quand la notification ne porte pas de catégorie)
+SMS_APPS=Messages,commhistoryd,jolla-messages
+MISSED_CALL_APPS=Téléphone,Phone,Appels,voicecall-ui,jolla-voicecall
+
+# Autres notifications natives à transmettre, par catégorie ou par application.
+# Pour connaître les noms exacts, lancer :  callbridge-daemon --debug
+# puis déclencher la notification voulue et lire les lignes « Notify app=… cat=… ».
+# Exemples :
+# EXTRA_CATEGORIES=x-nemo.email
+# EXTRA_APPS=harbour-fernschreiber,harbour-whisperfish
+EXTRA_CATEGORIES=
+EXTRA_APPS=
+
+# Chercher le nom de l'appelant dans le carnet d'adresses (1 = oui)
+LOOKUP_CONTACTS=1
+
+# Un événement non lu par Android est effacé au bout de ce délai (secondes)
+STALE_SECONDS=120
+
+# 1 = journal détaillé (journalctl --user -u callbridge -f)
+DEBUG=0
