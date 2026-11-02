@@ -100,6 +100,12 @@ Uninstalling goes through Android's own dialog. Android only lets an open app as
 
 The **Test** button sends a notification through the whole chain, from Sailfish to the watch.
 
+## After a restart
+
+When AppSupport stops, Android force-stops all its apps. An app stopped this way no longer receives Android's start-up signal until it is opened by hand. Without help, the relay would stay silent after every restart of the phone or of AppSupport.
+
+The Sailfish service therefore watches the status file of the Android relay. If Android is running but the relay has stopped answering, it opens the Android app with an "autostart" mark: the app starts its relay and closes at once. You may see a window flash briefly. The service tries at most three times per Android start, five minutes apart, so that a missing permission cannot cause endless attempts. This can be turned off with `AUTOSTART_ANDROID=0` in the settings file.
+
 ## Advanced settings
 
 Advanced settings live in a text file. To create it, copy the bundled template:
@@ -141,6 +147,8 @@ The easiest way is to follow a message step by step.
 **Files pile up in that folder without being picked up.** The Android app does not read them. Open it: the line "Readable" should say "yes" and the line "Relay" should say "running". Otherwise, grant the permissions and tap "Restart relay".
 
 **The Android app's "Last event" line changes, but the watch receives nothing.** The message crossed the wall, but Android or Garmin Connect blocks it. Check "Notifications allowed", then the permission given to Callbridge in Garmin Connect.
+
+**A call or a message did not reach the watch.** Open the settings app: the "Recent events" list shows each event the Android relay handled, with the delay between Sailfish and Android. If the event is listed, the message reached Android, and the issue lies with Garmin Connect or the watch. If it is missing, check the service log: each incoming call leaves a line starting with `oFono:`.
 
 **SMS arrive, but not incoming calls.** During a call, run:
 

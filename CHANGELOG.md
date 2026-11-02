@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.0 (2 November 2026)
+
+The Android relay restarts on its own after a restart of the phone or of AppSupport. Android force-stops its apps when AppSupport stops, and a force-stopped app no longer receives the start-up signal until opened by hand. The Sailfish service now notices when the relay stops answering while Android runs, and opens the Android app silently so that it restarts its relay (at most three attempts per Android start).
+
+Every notification now gets a unique key. oFono reuses the same call path for each call, so successive calls carried the same key, and a companion app could take a new call for one it had already forwarded. The same applied to two identical SMS.
+
+The settings app and the Android app show the last events handled, with the delay between Sailfish and Android. Incoming and ended calls are always written to the service log.
+
 ## 1.5.0 (2 November 2026)
 
 The Android app opens on its own screen again. Version 1.4 had added a separate launcher entry (an activity-alias) so that the icon could be hidden; AppSupport cannot open such entries and showed the app info page instead.

@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -59,6 +59,8 @@ DEFAULTS = {
     "LANGUAGE": "",
     # Chercher le nom de l'appelant dans le carnet d'adresses (1 = oui)
     "LOOKUP_CONTACTS": "1",
+    # Réveiller le relais Android s'il ne répond plus alors qu'Android tourne
+    "AUTOSTART_ANDROID": "1",
     # Bus sur lequel écouter oFono (system en usage normal)
     "OFONO_BUS": "system",
 }
@@ -550,6 +552,87 @@ def icon_keeper():
 
 
 # --------------------------------------------------------------------------
+# Chien de garde du relais Android
+#
+# Quand AppSupport s'arrête, Android force l'arrêt de ses applications. Une
+# application arrêtée de force ne reçoit plus le signal de démarrage du
+# système tant qu'on ne l'a pas ouverte à la main : après un redémarrage, le
+# relais restait donc muet. Le service surveille le fichier d'état du relais ;
+# s'il vieillit alors qu'Android tourne, il ouvre l'application Android avec
+# une marque « autostart » : elle démarre son relais et se referme aussitôt.
+# --------------------------------------------------------------------------
+
+STATE_STALE_SECONDS = 90
+KICK_INTERVAL_SECONDS = 300
+KICKS_PER_ANDROID_SESSION = 3
+
+
+def android_session():
+    """PID de system_server (le cœur d'Android) s'il tourne, sinon None."""
+    try:
+        pids = os.listdir("/proc")
+    except OSError:
+        return None
+    for pid in pids:
+        if pid.isdigit():
+            try:
+                with open("/proc/%s/comm" % pid) as fh:
+                    if fh.read().strip() == "system_server":
+                        return pid
+            except OSError:
+                pass
+    return None
+
+
+def relay_state_age():
+    try:
+        return time.time() - os.path.getmtime(
+            os.path.join(CFG["DROP_DIR"], "relay.state"))
+    except OSError:
+        return None
+
+
+def launch_android_app():
+    """Exécute la ligne Exec du raccourci créé par AppSupport."""
+    import shlex
+    for path in android_launchers():
+        for line in _read(path).splitlines():
+            if line.startswith("Exec="):
+                cmd = [a for a in shlex.split(line[5:])
+                       if not (len(a) == 2 and a.startswith("%"))]
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, start_new_session=True)
+                return True
+    return False
+
+
+def watchdog():
+    session, kicks, last_kick = None, 0, 0.0
+    time.sleep(45)                      # laisser au relais le temps de démarrer seul
+    while True:
+        try:
+            current = android_session()
+            if current != session:
+                session, kicks = current, 0
+            age = relay_state_age()
+            stale = age is None or age > STATE_STALE_SECONDS
+            if (current and stale and CFG["AUTOSTART_ANDROID"] == "1"
+                    and kicks < KICKS_PER_ANDROID_SESSION
+                    and time.time() - last_kick > KICK_INTERVAL_SECONDS):
+                marker = os.path.join(CFG["DROP_DIR"], "autostart.request")
+                open(marker, "w").close()
+                os.chmod(marker, 0o666)
+                if launch_android_app():
+                    kicks += 1
+                    last_kick = time.time()
+                    log("relais Android muet : réveil de l'application (%d/%d)"
+                        % (kicks, KICKS_PER_ANDROID_SESSION))
+        except Exception as exc:
+            dbg("chien de garde:", exc)
+        time.sleep(30)
+
+
+# --------------------------------------------------------------------------
 # Notifications natives (bus de session)
 # --------------------------------------------------------------------------
 
@@ -618,7 +701,8 @@ def on_notify(header, args):
     else:
         title, text = summary, body
     drop({"action": "post", "kind": kind,
-          "key": "%s-%s" % (kind, abs(hash((summary, body))) % 10**8),
+          "key": "%s-%d-%d" % (kind, abs(hash((summary, body))) % 10**8,
+                               int(time.time())),
           "title": title, "text": text, "app": str(app_name)})
 
 
@@ -678,7 +762,10 @@ def lookup_contact(number):
 
 
 def call_key(path):
-    return "call-" + re.sub(r"[^A-Za-z0-9]", "_", path)
+    # oFono réutilise le même chemin (/ril_0/voicecall01) pour chaque appel :
+    # on ajoute l'heure pour qu'aucune application compagnon ne prenne un
+    # nouvel appel pour une notification déjà transmise.
+    return "call-%s-%d" % (re.sub(r"[^A-Za-z0-9]", "_", path), int(time.time()))
 
 
 def on_ofono(header, args):
@@ -691,6 +778,7 @@ def on_ofono(header, args):
             return
         path, props = args[0], args[1]
         state = props.get("State", "")
+        log("oFono: appel %s (%s)" % (state, path))
         dbg("CallAdded", path, props)
         if state not in ("incoming", "waiting"):
             return
@@ -711,6 +799,7 @@ def on_ofono(header, args):
 
     elif iface == "org.ofono.VoiceCallManager" and member == "CallRemoved":
         path = args[0] if args else header["path"]
+        log("oFono: fin d'appel (%s)" % path)
         key = _calls.pop(path, None)
         if key:
             drop({"action": "cancel", "kind": "call", "key": key})
@@ -756,7 +845,8 @@ def main():
     os.makedirs(CFG["DROP_DIR"], exist_ok=True)
 
     threads = [threading.Thread(target=cleaner, daemon=True),
-               threading.Thread(target=icon_keeper, daemon=True)]
+               threading.Thread(target=icon_keeper, daemon=True),
+               threading.Thread(target=watchdog, daemon=True)]
     threads.append(threading.Thread(target=monitor, daemon=True, args=(
         "session",
         ["type='method_call',interface='org.freedesktop.Notifications',"

@@ -43,6 +43,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+
+        // Woken up by the Sailfish service after AppSupport restarted: start
+        // the relay and close at once, without showing anything.
+        File marker = new File(RelayService.exchangeDir(), "autostart.request");
+        if (marker.exists()
+                && System.currentTimeMillis() - marker.lastModified() < 120 * 1000L) {
+            marker.delete();
+            RelayService.start(this);
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
         int pad = (int) (16 * getResources().getDisplayMetrics().density);
 
         LinearLayout col = new LinearLayout(this);
@@ -243,6 +255,12 @@ public class MainActivity extends Activity {
             sb.append(L.t("Contacts: ", "Contacts : "))
                     .append(yes(checkSelfPermission(PERMS[2]) == PackageManager.PERMISSION_GRANTED))
                     .append('\n');
+        }
+        if (!RelayService.recent.isEmpty()) {
+            sb.append(L.t("Recent events (delay):", "Derniers événements (délai) :")).append('\n');
+            for (String line : RelayService.recentLines()) {
+                sb.append("  ").append(line).append('\n');
+            }
         }
         if (RelayService.lastEventAt > 0) {
             sb.append(L.t("Last event: ", "Dernier événement : "))

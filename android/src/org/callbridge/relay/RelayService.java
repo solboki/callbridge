@@ -44,6 +44,35 @@ public class RelayService extends Service {
     static volatile String lastEventTitle = "";
     static volatile boolean running = false;
 
+    /** Last events handled, newest first, for diagnosis: "15:31:02 call Jean (1.2 s)". */
+    static final java.util.LinkedList<String> recent = new java.util.LinkedList<String>();
+
+    static synchronized void addRecent(JSONObject ev) {
+        String action = ev.optString("action");
+        if ("command".equals(action)) {
+            return;
+        }
+        long ts = ev.optLong("ts", 0);
+        String delay = ts > 0
+                ? String.format(java.util.Locale.ROOT, "%.1f s", (System.currentTimeMillis() - ts) / 1000.0)
+                : "?";
+        String what = "cancel".equals(action) ? "end" : ev.optString("kind");
+        String title = ev.optString("title", "");
+        if (title.length() > 24) {
+            title = title.substring(0, 24) + "…";
+        }
+        recent.addFirst(new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT)
+                .format(new java.util.Date()) + " " + what
+                + (title.length() > 0 ? " " + title : "") + " (" + delay + ")");
+        while (recent.size() > 8) {
+            recent.removeLast();
+        }
+    }
+
+    static synchronized java.util.List<String> recentLines() {
+        return new java.util.ArrayList<String>(recent);
+    }
+
     private static final long STATE_MS = 30 * 1000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -171,6 +200,8 @@ public class RelayService extends Service {
             try {
                 JSONObject ev = new JSONObject(read(f));
                 if (Notifier.handle(this, ev)) {
+                    addRecent(ev);
+                    writeState(this);
                     lastEventAt = System.currentTimeMillis();
                     lastEventTitle = ev.optString("action") + " : "
                             + ev.optString("title", ev.optString("key"));
@@ -229,6 +260,7 @@ public class RelayService extends Service {
             st.put("storage", granted(ctx, "android.permission.WRITE_EXTERNAL_STORAGE"));
             st.put("contacts", granted(ctx, "android.permission.READ_CONTACTS"));
             st.put("last_event", lastEventAt);
+            st.put("recent", new org.json.JSONArray(recentLines()));
             st.put("ts", System.currentTimeMillis());
             File d = exchangeDir();
             File tmp = new File(d, ".relay.state.tmp");

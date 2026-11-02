@@ -49,6 +49,7 @@ ApplicationWindow {
             "C'est fait. Si l'icône ne change pas d'ici quelques secondes, redémarrez l'écran d'accueil ou le téléphone.",
         "Could not change the icon: ": "Impossible de modifier l'icône : ",
         "Uninstall Android app": "Désinstaller l'application Android",
+        "Recent events (delay):": "Derniers événements (délai) :",
         "Uninstalling Android app": "Désinstallation de l'application Android",
         "Confirm the uninstallation in the Android dialog.":
             "Confirmez la désinstallation dans la fenêtre d'Android.",
@@ -144,6 +145,18 @@ ApplicationWindow {
                         visible: st.relay !== undefined && st.relay.known === true
                         label: t("Version")
                         value: st.relay && st.relay.version ? st.relay.version : ""
+                    }
+
+                    Label {
+                        visible: st.relay !== undefined && st.relay.recent !== undefined
+                                 && st.relay.recent.length > 0
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        color: Theme.secondaryHighlightColor
+                        font.pixelSize: Theme.fontSizeExtraSmall
+                        wrapMode: Text.Wrap
+                        text: visible ? t("Recent events (delay):") + "\n"
+                                        + st.relay.recent.join("\n") : ""
                     }
 
                     Label {
