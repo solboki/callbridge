@@ -1,8 +1,8 @@
 #!/bin/sh
-# Construit l'APK, l'archive des sources et le RPM Sailfish dans dist/.
+# Builds the APK, the source archive and the Sailfish RPM into dist/.
 set -e
 cd "$(dirname "$0")"
-V=1.3.0
+V=1.4.0
 TOP=$(pwd)
 
 sh android/build.sh
@@ -10,7 +10,7 @@ sh android/build.sh
 rm -rf dist rpmbuild
 mkdir -p dist rpmbuild/SOURCES rpmbuild/SPECS
 
-# Archive des sources (sans la clé de signature ni les fichiers construits)
+# Source archive (without the signing key or built files)
 tar --transform "s,^\.,callbridge-$V," \
     --exclude=./.git --exclude=./dist --exclude=./rpmbuild --exclude=./android/build \
     --exclude='*.keystore' --exclude='*.idsig' --exclude='__pycache__' \

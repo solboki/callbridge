@@ -1,11 +1,11 @@
 [Unit]
-Description=Callbridge - relais des appels et SMS natifs vers Android AppSupport
+Description=Callbridge - forwards native calls and SMS to Android AppSupport
 After=dbus.socket
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/callbridge-daemon
-Restart=always
+Restart=on-failure
 RestartSec=10
 
 [Install]

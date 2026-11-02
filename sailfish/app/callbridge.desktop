@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Callbridge
+Comment=Forward native calls and SMS to your watch app
+Comment[fr]=Transmettre appels et SMS natifs à l'application de la montre
+Icon=callbridge
+Exec=sailfish-qml callbridge
+X-Nemo-Application-Type=silica-qt5
+
+[X-Sailjail]
+Sandboxing=Disabled

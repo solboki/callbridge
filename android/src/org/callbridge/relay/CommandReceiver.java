@@ -5,7 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 
 /**
- * Canal de secours, utile pour tester la moitié Android seule :
+ * Fallback channel, handy to test the Android half on its own:
  *   devel-su appsupport-attach am broadcast -a org.callbridge.relay.POST \
  *       -n org.callbridge.relay/.CommandReceiver -e title "Test" -e text "Bonjour"
  */

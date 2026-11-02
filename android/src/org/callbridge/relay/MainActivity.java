@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-/** Écran unique : état du relais, autorisations et notification de test. */
+/** Single screen: relay status, permissions, test notification, icon visibility. */
 public class MainActivity extends Activity {
 
     private static final String[] PERMS = {
@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     };
 
     private TextView status;
+    private Button iconBtn;
     private final Handler handler = new Handler();
     private final Runnable refresh = new Runnable() {
         @Override
@@ -56,10 +57,14 @@ public class MainActivity extends Activity {
         col.addView(title);
 
         TextView intro = new TextView(this);
-        intro.setText("Relaie vers Android les appels et SMS natifs de Sailfish OS, "
-                + "pour que l'application de la montre (Garmin Connect, par exemple) les transmette.\n\n"
-                + "Dans l'application de la montre, autorisez les notifications de l'application "
-                + "« Callbridge ».");
+        intro.setText(L.t(
+                "Forwards native Sailfish OS calls and SMS to Android, so that your watch app "
+                        + "(Garmin Connect, for instance) can pass them on.\n\n"
+                        + "In your watch app, allow notifications from \"Callbridge\".",
+                "Relaie vers Android les appels et SMS natifs de Sailfish OS, pour que "
+                        + "l'application de la montre (Garmin Connect, par exemple) les transmette.\n\n"
+                        + "Dans l'application de la montre, autorisez les notifications de "
+                        + "« Callbridge »."));
         intro.setPadding(0, pad / 2, 0, pad);
         col.addView(intro);
 
@@ -68,54 +73,77 @@ public class MainActivity extends Activity {
         status.setPadding(0, 0, 0, pad);
         col.addView(status);
 
-        col.addView(button("Accorder les autorisations", new View.OnClickListener() {
+        col.addView(button(L.t("Grant permissions", "Accorder les autorisations"),
+                new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (!askPermissions()) {
-                    toast("Les autorisations (stockage, contacts) sont accordées.");
+                    toast(L.t("Storage and contacts permissions are granted.",
+                            "Les autorisations (stockage, contacts) sont accordées."));
                 }
                 if (!Notifier.enabled(MainActivity.this)) {
-                    toast("Les notifications sont bloquées : activez-les dans l'écran qui s'ouvre.");
+                    toast(L.t("Notifications are blocked: enable them in the next screen.",
+                            "Les notifications sont bloquées : activez-les dans l'écran qui s'ouvre."));
                     openNotificationSettings();
                 }
             }
         }));
-        col.addView(button("Réglages des notifications", new View.OnClickListener() {
+        col.addView(button(L.t("Notification settings", "Réglages des notifications"),
+                new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 openNotificationSettings();
             }
         }));
-        col.addView(button("Notification de test", new View.OnClickListener() {
+        col.addView(button(L.t("Test notification", "Notification de test"),
+                new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (!Notifier.enabled(MainActivity.this)) {
-                    toast("Android bloque les notifications de Callbridge : "
-                            + "aucune ne peut partir. Ouvrez « Réglages des notifications ».");
+                    toast(L.t("Android blocks Callbridge notifications, so nothing can reach "
+                                    + "the watch. Open \"Notification settings\".",
+                            "Android bloque les notifications de Callbridge : aucune ne peut "
+                                    + "partir. Ouvrez « Réglages des notifications »."));
                     return;
                 }
                 Notifier.post(MainActivity.this, "test", "sms", "Callbridge",
-                        "Notification de test : si elle arrive sur la montre, tout fonctionne.");
-                toast("Notification de test publiée dans Android.");
+                        L.t("Test notification: if it reaches your watch, everything works.",
+                                "Notification de test : si elle arrive sur la montre, tout fonctionne."));
+                toast(L.t("Test notification posted in Android.",
+                        "Notification de test publiée dans Android."));
             }
         }));
-        col.addView(button("Ne pas optimiser la batterie", new View.OnClickListener() {
+        col.addView(button(L.t("Don't optimise battery", "Ne pas optimiser la batterie"),
+                new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 try {
-                    startActivity(new Intent(
-                            Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                    startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
                 } catch (Exception ignored) {
-                    // réglage absent dans certains conteneurs
+                    // setting missing in some containers
                 }
             }
         }));
-        col.addView(button("Redémarrer le relais", new View.OnClickListener() {
+        iconBtn = button("", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean hide = !RelayService.iconHidden(MainActivity.this);
+                RelayService.setIconHidden(MainActivity.this, hide);
+                toast(hide
+                        ? L.t("Icon hidden. Open Callbridge from the Sailfish settings app.",
+                              "Icône masquée. Ouvrez Callbridge depuis l'application Sailfish.")
+                        : L.t("Icon shown.", "Icône affichée."));
+                updateStatus();
+            }
+        });
+        col.addView(iconBtn);
+        col.addView(button(L.t("Restart relay", "Redémarrer le relais"),
+                new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 stopService(new Intent(MainActivity.this, RelayService.class));
                 RelayService.start(MainActivity.this);
-                toast("Relais redémarré.");
+                toast(L.t("Relay restarted.", "Relais redémarré."));
             }
         }));
 
@@ -139,7 +167,7 @@ public class MainActivity extends Activity {
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
     }
 
-    /** Ouvre l'écran des notifications de Callbridge (ou, à défaut, sa fiche). */
+    /** Opens Callbridge's notification settings, or its app info page as a fallback. */
     private void openNotificationSettings() {
         Intent i = new Intent("android.settings.APP_NOTIFICATION_SETTINGS");
         i.putExtra("android.provider.extra.APP_PACKAGE", getPackageName());
@@ -149,17 +177,17 @@ public class MainActivity extends Activity {
             startActivity(i);
             return;
         } catch (Exception ignored) {
-            // écran absent : on passe à la fiche de l'application
+            // screen missing: fall back to the app info page
         }
         try {
             startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                     android.net.Uri.parse("package:" + getPackageName())));
         } catch (Exception e) {
-            toast("Impossible d'ouvrir les réglages Android.");
+            toast(L.t("Cannot open Android settings.", "Impossible d'ouvrir les réglages Android."));
         }
     }
 
-    /** Demande les autorisations manquantes. Retourne vrai si une demande a été faite. */
+    /** Requests missing permissions. Returns true if a request was made. */
     private boolean askPermissions() {
         if (Build.VERSION.SDK_INT < 23) {
             return false;
@@ -179,7 +207,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
-        // Le relais doit être relancé pour accéder au dossier partagé.
+        // The relay must restart to gain access to the shared folder.
         stopService(new Intent(this, RelayService.class));
         RelayService.start(this);
         updateStatus();
@@ -194,31 +222,42 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         handler.removeCallbacks(refresh);
+        RelayService.writeState(this);
         super.onPause();
+    }
+
+    private String yes(boolean b) {
+        return b ? L.t("yes", "oui") : L.t("NO", "NON");
     }
 
     private void updateStatus() {
         File dir = RelayService.exchangeDir();
         StringBuilder sb = new StringBuilder();
-        sb.append("Relais : ").append(RelayService.running ? "actif" : "arrêté").append('\n');
-        sb.append("Dossier : ").append(dir).append('\n');
-        sb.append("Lisible : ").append(dir.canRead() ? "oui" : "non").append('\n');
-        sb.append("Notifications autorisées : ")
-                .append(Notifier.enabled(this) ? "oui" : "NON").append('\n');
+        sb.append(L.t("Relay: ", "Relais : "))
+                .append(RelayService.running ? L.t("running", "actif") : L.t("stopped", "arrêté"))
+                .append('\n');
+        sb.append(L.t("Folder: ", "Dossier : ")).append(dir).append('\n');
+        sb.append(L.t("Readable: ", "Lisible : ")).append(yes(dir.canRead())).append('\n');
+        sb.append(L.t("Notifications allowed: ", "Notifications autorisées : "))
+                .append(yes(Notifier.enabled(this))).append('\n');
         if (Build.VERSION.SDK_INT >= 23) {
-            for (String p : PERMS) {
-                boolean ok = checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED;
-                sb.append(p.substring(p.lastIndexOf('.') + 1)).append(" : ")
-                        .append(ok ? "oui" : "non").append('\n');
-            }
+            sb.append(L.t("Storage: ", "Stockage : "))
+                    .append(yes(checkSelfPermission(PERMS[1]) == PackageManager.PERMISSION_GRANTED))
+                    .append('\n');
+            sb.append(L.t("Contacts: ", "Contacts : "))
+                    .append(yes(checkSelfPermission(PERMS[2]) == PackageManager.PERMISSION_GRANTED))
+                    .append('\n');
         }
         if (RelayService.lastEventAt > 0) {
-            sb.append("Dernier événement : ")
+            sb.append(L.t("Last event: ", "Dernier événement : "))
                     .append(DateFormat.getTimeInstance().format(new Date(RelayService.lastEventAt)))
                     .append("\n  ").append(RelayService.lastEventTitle);
         } else {
-            sb.append("Aucun événement reçu depuis le démarrage.");
+            sb.append(L.t("No event received since start.", "Aucun événement reçu depuis le démarrage."));
         }
         status.setText(sb.toString());
+        iconBtn.setText(RelayService.iconHidden(this)
+                ? L.t("Show launcher icon", "Afficher l'icône")
+                : L.t("Hide launcher icon", "Masquer l'icône"));
     }
 }

@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -55,6 +55,8 @@ DEFAULTS = {
     # Durée de vie d'un fichier non consommé, en secondes
     "STALE_SECONDS": "120",
     "DEBUG": "0",
+    # Langue des textes envoyés à la montre (fr, en) ; vide = langue du téléphone
+    "LANGUAGE": "",
     # Chercher le nom de l'appelant dans le carnet d'adresses (1 = oui)
     "LOOKUP_CONTACTS": "1",
     # Bus sur lequel écouter oFono (system en usage normal)
@@ -91,7 +93,41 @@ def load_config():
 
 
 CFG = load_config()
+DISABLED_FLAG = os.path.expanduser("~/.config/callbridge/disabled")
 DEBUG = CFG["DEBUG"] == "1" or "--debug" in sys.argv
+
+
+# Texts shown on the watch: English, or French when the phone is in French.
+FRENCH = {
+    "Phone": "Téléphone",
+    "Missed call": "Appel manqué",
+    "Incoming call": "Appel entrant",
+    "Call waiting": "Double appel",
+    "Private number": "Numéro masqué",
+    "Test from Sailfish OS": "Test depuis Sailfish OS",
+}
+
+
+def phone_language():
+    """Language of the phone: LANGUAGE setting, then LANG, then Sailfish's locale file."""
+    if CFG.get("LANGUAGE"):
+        return CFG["LANGUAGE"][:2].lower()
+    lang = os.environ.get("LC_ALL") or os.environ.get("LANG") or ""
+    if not lang:
+        for path in ("/var/lib/environment/nemo/locale.conf",
+                     os.path.expanduser("~/.config/locale.conf")):
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    for line in fh:
+                        if line.startswith("LANG="):
+                            lang = line.split("=", 1)[1].strip().strip('"')
+            except OSError:
+                pass
+    return lang[:2].lower()
+
+
+def tr(text):
+    return FRENCH.get(text, text) if phone_language() == "fr" else text
 
 
 def log(*args):
@@ -449,9 +485,9 @@ def on_notify(header, args):
     if kind == "missed" and by_app:
         # Sans catégorie, on ne sait pas comment le texte est composé :
         # on le transmet tel que Sailfish l'affiche.
-        title, text = summary or "Téléphone", body
+        title, text = summary or tr("Phone"), body
     elif kind == "missed":
-        title = "Appel manqué"
+        title = tr("Missed call")
         text = summary if not body or body == summary else \
             "%s : %s" % (summary, body)
     else:
@@ -538,8 +574,8 @@ def on_ofono(header, args):
             number = ""
         name = props.get("Name") or (lookup_contact(number) if number else "")
         _calls[path] = call_key(path)
-        label = "Appel entrant" if state == "incoming" else "Double appel"
-        shown = number or "Numéro masqué"
+        label = tr("Incoming call") if state == "incoming" else tr("Call waiting")
+        shown = number or tr("Private number")
         if name:
             title, text = name, "%s · %s" % (label, shown)
         else:
@@ -571,7 +607,13 @@ def main():
         return
     if "--test" in sys.argv:
         drop({"action": "post", "kind": "test", "key": "test",
-              "title": "Callbridge", "text": "Test depuis Sailfish OS"})
+              "title": "Callbridge", "text": tr("Test from Sailfish OS")})
+        return
+
+    # Interrupteur de l'application de réglage : tant que ce fichier existe,
+    # le service s'arrête aussitôt (code 0, donc systemd ne le relance pas).
+    if os.path.exists(DISABLED_FLAG) and "--force" not in sys.argv:
+        log("désactivé par", DISABLED_FLAG)
         return
 
     log("version", VERSION, "- dossier d'échange:", CFG["DROP_DIR"])

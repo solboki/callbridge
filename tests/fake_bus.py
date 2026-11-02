@@ -1,6 +1,6 @@
-"""Simule, sur un bus D-Bus de session, ce que Sailfish OS émet :
-notifications de SMS et d'appels manqués (org.freedesktop.Notifications)
-et signaux d'appel d'oFono. Utilisé par run-tests.sh."""
+"""Simulates, on a D-Bus session bus, what Sailfish OS emits: SMS and
+missed-call notifications (org.freedesktop.Notifications) and oFono call
+signals. Used by run-tests.sh."""
 import asyncio
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, method, signal
@@ -63,8 +63,8 @@ async def main():
     await notify("foo", "Ignore", "x", "x-other")
     await notify("Messages", "Alice Martin", "Essai3", "")
     await notify("Callbridge", "Alice Martin", "Essai3 echo", "")
-    # appel entrant connu puis décroché ; appel masqué puis raccroché ;
-    # appel sortant (doit être ignoré)
+    # known incoming call then answered; private call then hung up;
+    # outgoing call (must be ignored)
     mgr.CallAdded("/ril_0/voicecall01", {
         "LineIdentification": Variant("s", "+33612345678"),
         "Name": Variant("s", ""), "State": Variant("s", "incoming"),

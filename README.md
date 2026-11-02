@@ -1,169 +1,180 @@
+<p align="center"><img src="icons/callbridge-172.png" width="120" alt="Callbridge icon"></p>
+
 # Callbridge
 
-Callbridge fait arriver sur votre montre connectée les appels et les SMS de Sailfish OS, quand la montre dépend d'une application Android comme Garmin Connect.
+Callbridge brings Sailfish OS phone calls and text messages to your smartwatch, when the watch relies on an Android companion app such as Garmin Connect.
 
-> **Projet réalisé en « vibe coding ».** Le code de Callbridge a été écrit par l'intelligence artificielle Claude Opus 5.5 (Anthropic), au fil d'une conversation avec son auteur, qui a fixé le besoin, testé chaque version sur son téléphone et signalé les erreurs. Personne n'a relu le code ligne à ligne comme on le ferait pour un logiciel professionnel. Il est publié tel quel, sans garantie, dans l'espoir qu'il rende service. Les retours et corrections sont les bienvenus.
+> **Vibe-coded project.** Callbridge was written by the AI model Claude Opus 5.5 (Anthropic), in a conversation with its author, who defined the need, tested every version on his own phone and reported what went wrong. The code has not been reviewed line by line as professional software would be. It is published as is, without any warranty, in the hope that it will be useful. Feedback and fixes are welcome.
 
-*An English summary is available [at the end of this page](#in-english).*
+## The problem it solves
 
-## Le problème résolu
+On a Sailfish OS phone, Android apps run in a separate compartment called AppSupport. Garmin Connect works well there, but it only sees notifications created inside that compartment. Calls and SMS, however, are handled by the native Sailfish apps, on the other side of the wall. Garmin Connect never sees them, so the watch stays silent when the phone rings.
 
-Sur un téléphone Sailfish OS, les applications Android tournent dans un compartiment séparé, appelé AppSupport. Garmin Connect y fonctionne bien, mais il ne voit que les notifications nées dans ce compartiment. Or les appels et les SMS sont gérés par les applications natives de Sailfish, de l'autre côté de la cloison. Garmin Connect ne les voit jamais, et la montre reste muette quand le téléphone sonne.
+Callbridge carries the messages across the wall. It does not talk to the watch and does not touch its pairing. It copies native calls and SMS as Android notifications, which Garmin Connect then forwards as usual.
 
-Callbridge fait traverser la cloison aux messages. Il ne parle pas à la montre et ne touche pas à son appairage : il recopie les appels et SMS natifs sous forme de notifications Android, que Garmin Connect transmet ensuite normalement.
+In other words, the watch keeps talking to Garmin Connect exactly as before. Callbridge simply gives Garmin Connect something to say.
 
-Autrement dit, la montre continue de dialoguer avec Garmin Connect comme avant. Callbridge se contente de lui donner quelque chose à dire.
+## How it works
 
-## Comment cela fonctionne
-
-Callbridge se compose de deux morceaux qui se complètent.
+Callbridge is made of three parts.
 
 ```
- Sailfish OS                                   Conteneur Android (AppSupport)
-┌───────────────────────────┐                 ┌──────────────────────────────┐
-│ SMS, appels manqués       │                 │                              │
-│ appels entrants (oFono)   │                 │  application Callbridge      │
-│          │                │   fichier JSON  │          │                   │
-│          ▼                │  ─────────────► │          ▼                   │
-│  service callbridge       │ ~/android_      │  notification Android        │
-│  (paquet RPM)             │ storage/        │          │                   │
-│                           │ Callbridge      │          ▼                   │
-└───────────────────────────┘                 │  Garmin Connect ──► montre   │
-                                              └──────────────────────────────┘
+ Sailfish OS                                  Android container (AppSupport)
+┌───────────────────────────┐                ┌──────────────────────────────┐
+│ SMS, missed calls         │                │                              │
+│ incoming calls (oFono)    │                │  Callbridge Android app      │
+│          │                │   JSON file    │          │                   │
+│          ▼                │  ────────────► │          ▼                   │
+│  callbridge service       │  ~/android_    │  Android notification        │
+│                           │  storage/      │          │                   │
+│  Callbridge settings app  │  Callbridge    │          ▼                   │
+│  (on/off, install, icon)  │                │  Garmin Connect ──► watch    │
+└───────────────────────────┘                └──────────────────────────────┘
 ```
 
-Le premier morceau est un petit service Sailfish, installé par le paquet RPM. Il écoute le bus de messages du système (D-Bus, le canal par lequel les applications se parlent). Il y repère les notifications de SMS et d'appels manqués, ainsi que les appels entrants annoncés par oFono, la partie du système qui gère la téléphonie.
+The first part is a small background service on Sailfish. It listens to the system message bus (D-Bus, the channel apps use to talk to each other). There it spots SMS and missed-call notifications, as well as incoming calls announced by oFono, the part of the system that handles telephony.
 
-À chaque événement, le service écrit un petit fichier texte au format JSON (un format de données structuré) dans le dossier `~/android_storage/Callbridge`. Ce dossier est partagé avec Android, qui le voit sous le nom `/sdcard/Callbridge`.
+For each event, the service writes a small text file in JSON format (a structured data format) into the folder `~/android_storage/Callbridge`. Android sees this shared folder as `/sdcard/Callbridge`.
 
-Le second morceau est une petite application Android, installée par le fichier APK. Elle surveille ce dossier, transforme chaque fichier en notification Android, puis l'efface. Aucun des deux morceaux n'a besoin des droits d'administrateur pour fonctionner.
+The second part is a small Android app. It watches that folder, turns each file into an Android notification, then deletes it.
 
-## Ce qui arrive sur la montre
+The third part is a native Sailfish settings app, called Callbridge, which lets you control everything without a terminal. None of the three parts needs root access.
 
-**Les SMS** arrivent avec le nom de l'expéditeur et le texte du message.
+## What reaches the watch
 
-**Les appels entrants** arrivent pendant la sonnerie. Si le numéro figure dans votre répertoire, la montre affiche le nom du contact, puis « Appel entrant » et le numéro. Sinon, elle affiche le numéro seul, ou « Numéro masqué ». La notification disparaît de la montre dès que vous décrochez ou que l'appel se termine.
+**Text messages** arrive with the sender's name and the message text.
 
-**Les appels manqués** arrivent tels que Sailfish les affiche dans son centre de notifications.
+**Incoming calls** arrive while the phone rings. If the number is in your contacts, the watch shows the contact's name, then "Incoming call" and the number. Otherwise it shows the number alone, or "Private number". The notification disappears from the watch as soon as you answer or the call ends.
 
-D'autres notifications natives peuvent être ajoutées par réglage, par exemple les courriels (voir « Réglages »).
+**Missed calls** arrive as Sailfish shows them in its notification area.
 
-## Ce dont vous avez besoin
+Other native notifications can be added through the settings file, for example e-mails (see "Advanced settings").
 
-Il vous faut un téléphone sous Sailfish OS avec Android AppSupport. Callbridge a été mis au point sur un Jolla sous Sailfish OS 5, avec un conteneur Android 15 et une montre Garmin. Il devrait fonctionner avec les autres versions récentes, mais cela n'a pas été vérifié.
+Texts shown on the watch follow the phone's language: English, or French on a phone set to French.
 
-Il vous faut aussi l'application compagnon de votre montre, installée dans AppSupport et déjà appairée. Callbridge a été testé avec Garmin Connect. Rien n'est propre à Garmin dans son fonctionnement : toute application compagnon qui relaie les notifications Android devrait convenir.
+## Requirements
 
-Enfin, le mode développeur doit être activé (Paramètres, puis Outils de développement), ainsi que l'installation de logiciels non vérifiés.
+You need a phone running Sailfish OS with Android AppSupport. Callbridge was developed on a Jolla phone running Sailfish OS 5, with an Android 15 container and a Garmin watch. It should work on other recent versions, but this has not been checked.
+
+You also need your watch's companion app, installed in AppSupport and already paired. Callbridge was tested with Garmin Connect. Nothing in it is specific to Garmin: any companion app that forwards Android notifications should work.
+
+Finally, developer mode must be enabled (Settings, then Developer tools), and so must the installation of untrusted software.
 
 ## Installation
 
-Téléchargez les deux fichiers de la dernière version dans la page « Releases » du dépôt : le paquet Sailfish `callbridge-X.Y.Z-1.noarch.rpm` et l'application Android `Callbridge-X.Y.Z.apk`. Les lettres X.Y.Z désignent le numéro de version.
+Download the latest Sailfish package, `callbridge-X.Y.Z-1.noarch.rpm`, from the repository's "Releases" page. X.Y.Z stands for the version number. The Android app is included in this package.
 
-**1. Installer le paquet Sailfish.** Dans le terminal :
+**1. Install the Sailfish package.** In the terminal:
 
 ```
 devel-su pkcon install-local callbridge-X.Y.Z-1.noarch.rpm
 ```
 
-Un appui sur le fichier dans le gestionnaire de fichiers fonctionne aussi. Le service démarre de lui-même. S'il ne démarre pas, lancez-le en utilisateur ordinaire, sans `devel-su` :
+Tapping the file in the file manager works too. The service starts on its own, and a Callbridge icon appears among your apps.
 
-```
-systemctl --user daemon-reload
-systemctl --user restart callbridge
-```
+**2. Install the Android app.** Open the Callbridge settings app and tap "Install Android app". Sailfish asks you to confirm the installation. The Android app is also available as a separate file, `Callbridge-X.Y.Z.apk`, on the "Releases" page.
 
-**2. Installer l'application Android.** Appuyez sur le fichier `Callbridge-X.Y.Z.apk` dans le gestionnaire de fichiers. Une copie est aussi installée par le paquet RPM dans `/usr/share/callbridge/`.
+**3. Set up the Android app.** In the Callbridge settings app, tap "Open Android app". In the Android app, tap "Grant permissions". Android asks for access to storage, to read the shared folder, and to contacts, to find callers' names.
 
-**3. Régler l'application.** Ouvrez Callbridge et appuyez sur « Accorder les autorisations ». Android demande l'accès au stockage, pour lire le dossier partagé, et aux contacts, pour trouver le nom des appelants. Vérifiez ensuite la ligne « Notifications autorisées ». Si elle indique « NON », appuyez sur « Réglages des notifications » et activez-les. C'est le réglage le plus important : sous Android 13 et au-delà, une application dont les notifications sont bloquées ne peut rien transmettre, et Android ne prévient pas.
+Then check the line "Notifications allowed". If it says "NO", tap "Notification settings" and enable them. This is the most important setting: on Android 13 and later, an app whose notifications are blocked cannot forward anything, and Android does not warn you.
 
-Appuyez enfin sur « Ne pas optimiser la batterie » et exemptez Callbridge, pour qu'Android ne l'endorme pas.
+Finally, tap "Don't optimise battery" and exempt Callbridge, so that Android does not put it to sleep.
 
-**4. Régler Garmin Connect.** Dans les réglages de notifications de Garmin Connect, autorisez l'application Callbridge.
+**4. Set up Garmin Connect.** In Garmin Connect's notification settings, allow the "Callbridge" app.
 
-**5. Vérifier.** Appuyez sur « Notification de test » dans Callbridge : elle doit arriver sur la montre. Testez ensuite toute la chaîne depuis le terminal :
+**5. Check.** Back in the Callbridge settings app, the "Android relay" section should show "Active" and "Notifications allowed: yes". Tap "Send test notification": it should reach your watch within a few seconds. Then send yourself a text message from another phone.
 
-```
-callbridge-daemon --test
-```
+**6. Hide the Android icon (optional).** Once everything works, you can turn on "Hide Android app icon" in the settings app. The Android app keeps running; only its icon disappears from the launcher. "Open Android app" still works: it briefly restores the icon, opens the app, then hides it again.
 
-Une notification « Test depuis Sailfish OS » doit arriver sur la montre en deux secondes environ. Envoyez-vous enfin un SMS depuis un autre téléphone.
+## The settings app
 
-## Réglages
+The Callbridge settings app gathers everything in one screen.
 
-Les réglages se trouvent dans un fichier texte. Pour le créer, copiez le modèle fourni :
+The **Sailfish service** switch turns forwarding on or off. When it is off, the service stays stopped, even after a reboot, until you turn it back on.
+
+The **Android relay** section shows whether the Android app is running and correctly set up. It reads a small status file that the Android app updates every 30 seconds. "Not responding" means the Android app has stopped, or AppSupport is not running. The buttons below install or update the bundled Android app and open it.
+
+The **Test** button sends a notification through the whole chain, from Sailfish to the watch.
+
+## Advanced settings
+
+Advanced settings live in a text file. To create it, copy the bundled template:
 
 ```
 mkdir -p ~/.config/callbridge
 cp /usr/share/callbridge/callbridge.conf.example ~/.config/callbridge/callbridge.conf
 ```
 
-Modifiez-le, puis relancez le service avec `systemctl --user restart callbridge`. Chaque réglage y est expliqué.
+Edit it, then restart the service with `systemctl --user restart callbridge`, or by turning the switch off and on in the settings app. Each setting is explained in the file.
 
-Les trois premiers réglages coupent ou rétablissent chaque type d'événement : SMS, appels manqués et appels entrants.
+The first three settings turn each kind of event on or off: SMS, missed calls and incoming calls.
 
-Les réglages `EXTRA_CATEGORIES` et `EXTRA_APPS` ajoutent d'autres notifications natives. Par exemple, `EXTRA_CATEGORIES=x-nemo.email` transmet les courriels de l'application Courriel de Sailfish. Pour connaître le nom exact d'une notification, arrêtez le service, lancez-le à la main en mode détaillé, puis déclenchez la notification voulue :
+The `EXTRA_CATEGORIES` and `EXTRA_APPS` settings add other native notifications. For instance, `EXTRA_CATEGORIES=x-nemo.email` forwards e-mails from the Sailfish Mail app. To find the exact name of a notification, stop the service, run it by hand in verbose mode, then trigger the notification you want:
 
 ```
 systemctl --user stop callbridge
 callbridge-daemon --debug
 ```
 
-Chaque notification apparaît sous la forme d'une ligne `Notify app=… cat=…`. La valeur `cat` se reporte dans `EXTRA_CATEGORIES`, la valeur `app` dans `EXTRA_APPS`. Relancez ensuite le service avec `systemctl --user start callbridge`.
+Each notification shows up as a line `Notify app=… cat=…`. The `cat` value goes into `EXTRA_CATEGORIES`, the `app` value into `EXTRA_APPS`. Then restart the service with `systemctl --user start callbridge`.
 
-Les réglages `SMS_APPS` et `MISSED_CALL_APPS` servent quand Sailfish publie une notification sans catégorie. C'est le cas des SMS sur Sailfish OS 5, publiés sous le nom « Messages ». Si votre téléphone est réglé dans une autre langue, ce nom peut différer : le mode détaillé vous l'indiquera.
+The `SMS_APPS` and `MISSED_CALL_APPS` settings are used when Sailfish posts a notification without a category. This is the case for SMS on Sailfish OS 5, posted under the name "Messages". On a phone set to another language, this name may differ: verbose mode will tell you.
 
-## En cas de problème
+The `LANGUAGE` setting forces the language of the texts shown on the watch (`en` or `fr`). Left empty, it follows the phone.
 
-Le journal du service se lit avec la commande suivante :
+## Troubleshooting
+
+The service log can be read with:
 
 ```
 journalctl --user -u callbridge -f
 ```
 
-Le plus simple est de suivre le trajet d'un message, étape par étape.
+The easiest way is to follow a message step by step.
 
-**Rien n'apparaît dans `~/android_storage/Callbridge` lors d'un SMS.** C'est le service Sailfish qui ne repère pas la notification. Lancez `callbridge-daemon --debug` comme indiqué plus haut et vérifiez que le SMS y figure. S'il figure sous un nom d'application inconnu, ajoutez ce nom à `SMS_APPS`.
+**Nothing appears in `~/android_storage/Callbridge` when an SMS arrives.** The Sailfish service does not spot the notification. Run `callbridge-daemon --debug` as shown above and check that the SMS shows up. If it shows up under an unknown app name, add that name to `SMS_APPS`.
 
-**Les fichiers s'accumulent dans ce dossier sans être consommés.** C'est l'application Android qui ne les lit pas. Ouvrez-la : la ligne « Lisible » doit indiquer « oui » et la ligne « Relais » doit indiquer « actif ». Sinon, accordez les autorisations et appuyez sur « Redémarrer le relais ».
+**Files pile up in that folder without being picked up.** The Android app does not read them. Open it: the line "Readable" should say "yes" and the line "Relay" should say "running". Otherwise, grant the permissions and tap "Restart relay".
 
-**La ligne « Dernier événement » bouge dans l'application, mais la montre ne reçoit rien.** Le message a traversé la cloison, mais Android ou Garmin Connect le bloquent. Vérifiez la ligne « Notifications autorisées », puis l'autorisation donnée à Callbridge dans Garmin Connect.
+**The Android app's "Last event" line changes, but the watch receives nothing.** The message crossed the wall, but Android or Garmin Connect blocks it. Check "Notifications allowed", then the permission given to Callbridge in Garmin Connect.
 
-**Les SMS arrivent, mais pas les appels entrants.** Pendant un appel, lancez :
+**SMS arrive, but not incoming calls.** During a call, run:
 
 ```
 dbus-monitor --system "type='signal',interface='org.ofono.VoiceCallManager'"
 ```
 
-Si cette commande n'affiche rien, votre version de Sailfish réserve les signaux d'appel à des comptes privilégiés. Les appels manqués restent transmis dans tous les cas.
+If this command shows nothing, your Sailfish version restricts call signals to privileged accounts. Missed calls are still forwarded in any case.
 
-**Pour tester l'application Android seule**, sans le service Sailfish :
+**To test the Android app alone**, without the Sailfish service:
 
 ```
-devel-su appsupport-attach am broadcast -a org.callbridge.relay.POST -n org.callbridge.relay/.CommandReceiver -e title "Test" -e text "Bonjour"
+devel-su appsupport-attach am broadcast -a org.callbridge.relay.POST -n org.callbridge.relay/.CommandReceiver -e title "Test" -e text "Hello"
 ```
 
-## Limites connues
+## Known limitations
 
-On voit l'appel sur la montre, mais on ne peut ni décrocher ni refuser depuis le poignet.
+You see the call on the watch, but you cannot answer or decline it from your wrist.
 
-L'icône affichée sur la montre est celle d'un message, même pour un appel. C'est Garmin Connect qui choisit l'icône, selon des règles qu'il ne documente pas et qui semblent reposer sur une liste d'applications connues. Une présentation imitant les applications de téléphonie d'Android a été essayée sans succès, puis retirée.
+The watch shows a message icon, even for a call. Garmin Connect picks the icon itself, following rules it does not document and which seem to rely on a fixed list of known apps. A presentation imitating Android's own phone apps was tried without success, then removed.
 
-Sailfish recopie les notifications Android dans son propre centre de notifications. Un SMS peut donc y apparaître deux fois.
+Sailfish copies Android notifications into its own notification area. An SMS may therefore appear there twice.
 
-Le nom sous lequel Sailfish publie les appels manqués sans catégorie n'a été vérifié que partiellement. Si les appels manqués n'arrivent pas, le mode détaillé vous indiquera le nom à ajouter dans `MISSED_CALL_APPS`.
+Hiding the Android icon relies on AppSupport removing launcher entries for disabled Android components. This has been designed for, but not yet confirmed on, every Sailfish version.
 
-## Désinstallation
+The name under which Sailfish posts missed calls without a category has only been partly checked. If missed calls do not arrive, verbose mode will tell you which name to add to `MISSED_CALL_APPS`.
+
+## Uninstalling
 
 ```
 devel-su pkcon remove callbridge
 ```
 
-Désinstallez ensuite l'application Callbridge comme n'importe quelle application Android, puis supprimez le dossier `~/android_storage/Callbridge` et, si vous l'avez créé, `~/.config/callbridge`.
+Then uninstall the "Callbridge Android" app like any Android app, and delete the folder `~/android_storage/Callbridge` and, if you created it, `~/.config/callbridge`.
 
-## Construire depuis les sources
+## Building from source
 
-La construction se fait sur un ordinateur Debian ou Ubuntu, sans Android Studio ni Gradle :
+Building is done on a Debian or Ubuntu computer, without Android Studio or Gradle:
 
 ```
 sudo apt install openjdk-17-jdk aapt dalvik-exchange zipalign apksigner \
@@ -171,44 +182,36 @@ sudo apt install openjdk-17-jdk aapt dalvik-exchange zipalign apksigner \
 ./make-dist.sh
 ```
 
-Le script produit dans `dist/` l'APK et le RPM, tous deux numérotés, ainsi qu'une archive des sources.
+The script produces in `dist/` the APK and the RPM, both numbered, plus a source archive.
 
-L'APK est signé avec une clé créée au premier passage dans `android/callbridge.keystore`. Cette clé n'est volontairement pas publiée dans le dépôt. Conservez-la précieusement : Android refuse de mettre à jour une application avec un APK signé par une autre clé. Il faut alors désinstaller l'ancienne version d'abord.
+The APK is signed with a key created on the first run in `android/callbridge.keystore`. This key is deliberately not published in the repository. Keep it safe: Android refuses to update an app with an APK signed by a different key, and the old version must then be uninstalled first.
 
-Pour publier une nouvelle version, changez le numéro à quatre endroits : `V=` dans `make-dist.sh`, `Version:` dans `rpm/callbridge.spec`, `VERSION` dans `sailfish/callbridge-daemon`, et `versionCode` et `versionName` dans `android/AndroidManifest.xml`. Ajoutez une entrée dans `CHANGELOG.md` et dans le `%changelog` du fichier `.spec`.
+To release a new version, change the version number in four places: `V=` in `make-dist.sh`, `Version:` in `rpm/callbridge.spec`, `VERSION` in `sailfish/callbridge-daemon`, and `versionCode` and `versionName` in `android/AndroidManifest.xml`. Add an entry to `CHANGELOG.md` and to the `%changelog` of the `.spec` file.
 
 ## Tests
 
-Le service Sailfish peut être testé sur un ordinateur Linux, sans téléphone. Le script de test crée un bus D-Bus temporaire, y simule des SMS, des appels manqués et des appels entrants, puis vérifie les fichiers produits :
+The Sailfish service can be tested on a Linux computer, without a phone. The test script starts a temporary D-Bus bus, simulates SMS, missed calls and incoming calls on it, then checks the files produced:
 
 ```
 pip install dbus-next
 ./tests/run-tests.sh
 ```
 
-## Organisation des sources
+## Source layout
 
-| Dossier | Contenu |
+| Folder | Content |
 |---|---|
-| `sailfish/` | Le service (Python, sans dépendance autre que `python3` et `dbus-monitor`), son fichier de démarrage systemd et le modèle de réglages. |
-| `android/` | L'application Android, en Java, sans bibliothèque externe, et son script de construction. |
-| `rpm/` | La description du paquet Sailfish. |
-| `tests/` | Les tests du service sur un bus D-Bus simulé. |
+| `sailfish/` | The service (Python, needing only `python3` and `dbus-monitor`), its systemd unit and the settings template. |
+| `sailfish/app/` | The settings app: Silica interface (QML) and Python backend (PyOtherSide). |
+| `android/` | The Android app, in Java, without external libraries, and its build script. |
+| `icons/` | The project icon in the Sailfish OS shape, in every size used. |
+| `rpm/` | The Sailfish package description. |
+| `tests/` | Tests of the service on a simulated D-Bus bus. |
 
-## Projets voisins
+## Related projects
 
-[Vapaamin](https://forum.sailfishos.org/t/vapaamin-garmin-notifications-bridge/33097) suit une autre voie : il remplace Garmin Connect et parle directement à la montre, ce qui lui permet de transmettre toutes les notifications natives. Callbridge, lui, garde Garmin Connect et ses fonctions, comme la synchronisation des activités. [Amazfish](https://github.com/piggz/harbour-amazfish) joue le même rôle pour d'autres marques de montres.
+[Vapaamin](https://forum.sailfishos.org/t/vapaamin-garmin-notifications-bridge/33097) takes another route: it replaces Garmin Connect and talks to the watch directly, which lets it forward every native notification. Callbridge keeps Garmin Connect and its features, such as activity sync. [Amazfish](https://github.com/piggz/harbour-amazfish) plays the same role for other watch brands.
 
-## Licence
+## License
 
-Callbridge est un logiciel libre, distribué sous licence GNU GPL version 3 ou ultérieure. Le texte complet figure dans le fichier `LICENSE`.
-
-## In English
-
-Callbridge forwards native Sailfish OS phone calls and SMS to a smartwatch whose companion app (such as Garmin Connect) runs inside Android AppSupport. That app only sees Android notifications, so native calls and texts never reached the watch.
-
-A small Sailfish service (RPM) listens on D-Bus for native SMS and missed-call notifications and for incoming calls reported by oFono. It writes each event as a JSON file into `~/android_storage/Callbridge`. A small Android app (APK) watches that folder and re-posts each event as an Android notification, which the companion app forwards to the watch. Incoming calls show the caller's name when the number is in your contacts. No root access is needed.
-
-To install, run `devel-su pkcon install-local callbridge-X.Y.Z-1.noarch.rpm`, install `Callbridge-X.Y.Z.apk`, open it, grant permissions, and make sure the line "Notifications autorisées" reads "oui". Then allow Callbridge in your watch app's notification settings and run `callbridge-daemon --test`. The user interface and the documentation are in French.
-
-This project was vibe-coded with Claude Opus 5.5 (Anthropic) and tested by its author on a single device. It comes with no warranty. Licensed under GPL-3.0-or-later.
+Callbridge is free software, released under the GNU GPL version 3 or later. The full text is in the `LICENSE` file.

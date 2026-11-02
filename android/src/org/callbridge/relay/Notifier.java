@@ -56,6 +56,15 @@ final class Notifier {
         String key = ev.optString("key", "default");
         if ("cancel".equals(action)) {
             cancel(ctx, key);
+        } else if ("command".equals(action)) {
+            String cmd = ev.optString("command", "");
+            if ("hide-icon".equals(cmd)) {
+                RelayService.setIconHidden(ctx, true);
+            } else if ("show-icon".equals(cmd)) {
+                RelayService.setIconHidden(ctx, false);
+            } else {
+                RelayService.writeState(ctx);
+            }
         } else {
             String kind = ev.optString("kind", "other");
             String title = ev.optString("title", "");
@@ -95,7 +104,7 @@ final class Notifier {
                 return name == null || name.length() == 0 ? null : name;
             }
         } catch (Exception e) {
-            Log.w(RelayService.TAG, "recherche de contact impossible : " + e);
+            Log.w(RelayService.TAG, "contact lookup failed: " + e);
         } finally {
             if (c != null) {
                 c.close();

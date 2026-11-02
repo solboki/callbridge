@@ -1,6 +1,6 @@
 #!/bin/bash
-# Teste le service Sailfish sur un bus D-Bus temporaire, sans téléphone.
-# Prérequis : dbus-daemon, dbus-monitor, python3 et le module dbus-next
+# Tests the Sailfish service on a temporary D-Bus bus, without a phone.
+# Requirements: dbus-daemon, dbus-monitor, python3 and the dbus-next module
 #   (pip install dbus-next).
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -9,7 +9,7 @@ WORK=$(mktemp -d)
 FAKE=; DAEMON_PID=; BUS_PID=
 trap 'kill $FAKE $DAEMON_PID $BUS_PID 2>/dev/null; rm -rf "$WORK"' EXIT
 
-# Faux carnet d'adresses Sailfish contenant un contact
+# Fake Sailfish address book holding one contact
 DB="$WORK/home/.local/share/system/privileged/Contacts/qtcontacts-sqlite"
 mkdir -p "$DB"
 python3 - "$DB/contacts.db" <<'EOF'
@@ -28,39 +28,39 @@ export DBUS_SESSION_BUS_ADDRESS=$(printf '%s\n' "$BUS" | sed -n 1p)
 BUS_PID=$(printf '%s\n' "$BUS" | sed -n 2p)
 python3 "$HERE/fake_bus.py" & FAKE=$!
 sleep 0.8
-HOME="$WORK/home" DROP_DIR="$WORK/drop" OFONO_BUS=session DEBUG=1 \
+HOME="$WORK/home" DROP_DIR="$WORK/drop" OFONO_BUS=session DEBUG=1 LANGUAGE=fr \
     python3 "$DAEMON" > "$WORK/daemon.log" 2>&1 & DAEMON_PID=$!
 sleep 9
 kill $DAEMON_PID 2>/dev/null
 
 ALL=$(for f in "$WORK"/drop/*.json; do [ -f "$f" ] && { cat "$f"; echo; }; done)
 FAIL=0
-check() {  # check "description" "motif attendu" [nombre attendu]
+check() {  # check "description" "expected pattern" [expected count]
     local n
     n=$(printf '%s\n' "$ALL" | grep -cF -- "$2")
     if [ "$n" -eq "${3:-1}" ]; then
         echo "ok    $1"
     else
-        echo "ÉCHEC $1 (trouvé $n fois : $2)"
+        echo "FAIL  $1 (found $n times: $2)"
         FAIL=1
     fi
 }
 
-check "SMS avec catégorie, guillemets et retour à la ligne" \
+check "SMS with category, quotes and line break" \
       '"text": "Salut, ça va ?\nOn dit \"midi\" ou \"13h\" ? (test) [ok] {x}"'
-check "doublon de SMS ignoré" '"title": "Jean \"JD\" Dupont"' 1
-check "appel manqué avec catégorie" '"title": "Appel manqué", "text": "Marie"'
-check "SMS sans catégorie publié sous « Messages »" '"title": "Alice Martin", "text": "Essai3"'
-check "écho de Callbridge ignoré" 'Essai3 echo' 0
-check "notification d'une autre catégorie ignorée" 'Ignore' 0
-check "appel entrant avec nom trouvé dans le carnet" \
+check "duplicate SMS ignored" '"title": "Jean \"JD\" Dupont"' 1
+check "missed call with category" '"title": "Appel manqué", "text": "Marie"'
+check "SMS without category posted as Messages" '"title": "Alice Martin", "text": "Essai3"'
+check "Callbridge echo ignored" 'Essai3 echo' 0
+check "notification of another category ignored" 'Ignore' 0
+check "incoming call with name found in address book" \
       '"title": "Jean Dupont", "text": "Appel entrant · +33612345678"'
-check "appel masqué" '"text": "Numéro masqué"'
-check "appel retiré au décroché ou à la fin" '"action": "cancel"' 2
-check "appel sortant ignoré" '0611' 0
+check "private number" '"text": "Numéro masqué"'
+check "call removed when answered or ended" '"action": "cancel"' 2
+check "outgoing call ignored" '0611' 0
 
 if [ $FAIL -ne 0 ]; then
-    echo; echo "Journal du service :"; cat "$WORK/daemon.log"
+    echo; echo "Service log:"; cat "$WORK/daemon.log"
     exit 1
 fi
-echo "Tous les tests sont passés."
+echo "All tests passed."

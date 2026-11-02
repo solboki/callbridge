@@ -44,6 +44,10 @@ public class RelayService extends Service {
     static volatile String lastEventTitle = "";
     static volatile boolean running = false;
 
+    /** Component that puts Callbridge in the launcher (can be disabled to hide the icon). */
+    static final String LAUNCHER_ALIAS = "org.callbridge.relay.Launcher";
+    private static final long STATE_MS = 30 * 1000L;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Set<String> done = new LinkedHashSet<String>();
     private FileObserver observer;
@@ -73,6 +77,14 @@ public class RelayService extends Service {
         }
     }
 
+    private final Runnable stateWriter = new Runnable() {
+        @Override
+        public void run() {
+            writeState(RelayService.this);
+            handler.postDelayed(this, STATE_MS);
+        }
+    };
+
     private final Runnable poll = new Runnable() {
         @Override
         public void run() {
@@ -87,7 +99,7 @@ public class RelayService extends Service {
         startForeground(FG_ID, buildOngoing());
         dir = exchangeDir();
         if (!dir.exists() && !dir.mkdirs()) {
-            Log.w(TAG, "dossier introuvable : " + dir);
+            Log.w(TAG, "folder not found: " + dir);
         }
         observer = new FileObserver(dir.getAbsolutePath(),
                 FileObserver.CLOSE_WRITE | FileObserver.MOVED_TO | FileObserver.CREATE) {
@@ -104,7 +116,8 @@ public class RelayService extends Service {
         observer.startWatching();
         handler.post(poll);
         running = true;
-        Log.i(TAG, "service démarré, dossier : " + dir);
+        handler.post(stateWriter);
+        Log.i(TAG, "service started, folder: " + dir);
     }
 
     @Override
@@ -116,6 +129,7 @@ public class RelayService extends Service {
     public void onDestroy() {
         running = false;
         handler.removeCallbacks(poll);
+        handler.removeCallbacks(stateWriter);
         if (observer != null) {
             observer.stopWatching();
         }
@@ -133,8 +147,9 @@ public class RelayService extends Service {
                 0);
         return new Notification.Builder(this)
                 .setSmallIcon(R.drawable.ic_stat)
-                .setContentTitle("Callbridge actif")
-                .setContentText("Relais des appels et SMS vers la montre")
+                .setContentTitle(L.t("Callbridge is running", "Callbridge actif"))
+                .setContentText(L.t("Forwarding calls and SMS to your watch",
+                        "Relais des appels et SMS vers la montre"))
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .setShowWhen(false)
@@ -163,13 +178,73 @@ public class RelayService extends Service {
                             + ev.optString("title", ev.optString("key"));
                 }
             } catch (Exception e) {
-                Log.w(TAG, "fichier illisible " + name + " : " + e);
+                Log.w(TAG, "unreadable file " + name + ": " + e);
             }
             remember(name);
             if (!f.delete()) {
-                // Sailfish supprimera le fichier de lui-même au bout de deux minutes.
-                Log.d(TAG, "suppression impossible : " + name);
+                // The Sailfish service deletes stale files after two minutes anyway.
+                Log.d(TAG, "cannot delete " + name);
             }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Icon and state, driven by the Sailfish settings app
+    // ------------------------------------------------------------------
+
+    static boolean iconHidden(Context ctx) {
+        int st = ctx.getPackageManager().getComponentEnabledSetting(
+                new android.content.ComponentName(ctx, LAUNCHER_ALIAS));
+        return st == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+    }
+
+    /** Hides or shows the launcher icon without stopping the app. */
+    static void setIconHidden(Context ctx, boolean hidden) {
+        ctx.getPackageManager().setComponentEnabledSetting(
+                new android.content.ComponentName(ctx, LAUNCHER_ALIAS),
+                hidden ? android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                        : android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
+                android.content.pm.PackageManager.DONT_KILL_APP);
+        writeState(ctx);
+    }
+
+    private static boolean granted(Context ctx, String perm) {
+        return ctx.checkCallingOrSelfPermission(perm)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * Writes relay.state in the shared folder. The Sailfish settings app reads
+     * it to show whether the Android side is alive and correctly set up.
+     * The .state extension keeps it out of the event queue.
+     */
+    static void writeState(Context ctx) {
+        try {
+            JSONObject st = new JSONObject();
+            st.put("version", ctx.getPackageManager()
+                    .getPackageInfo(ctx.getPackageName(), 0).versionName);
+            st.put("running", running);
+            st.put("notifications", Notifier.enabled(ctx));
+            st.put("storage", granted(ctx, "android.permission.WRITE_EXTERNAL_STORAGE"));
+            st.put("contacts", granted(ctx, "android.permission.READ_CONTACTS"));
+            st.put("icon_hidden", iconHidden(ctx));
+            st.put("last_event", lastEventAt);
+            st.put("ts", System.currentTimeMillis());
+            File d = exchangeDir();
+            File tmp = new File(d, ".relay.state.tmp");
+            java.io.FileOutputStream out = new java.io.FileOutputStream(tmp);
+            try {
+                out.write(st.toString().getBytes("UTF-8"));
+            } finally {
+                out.close();
+            }
+            File dst = new File(d, "relay.state");
+            if (!tmp.renameTo(dst)) {
+                dst.delete();
+                tmp.renameTo(dst);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "cannot write state: " + e);
         }
     }
 

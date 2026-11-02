@@ -1,34 +1,38 @@
-# Configuration de Callbridge
-# Copier ce fichier dans ~/.config/callbridge/callbridge.conf puis relancer :
+# Callbridge settings
+# Copy this file to ~/.config/callbridge/callbridge.conf, then restart:
 #   systemctl --user restart callbridge
 
-# Dossier partagé avec Android (vu comme /sdcard/Callbridge dans le conteneur)
+# Folder shared with Android (seen as /sdcard/Callbridge inside the container)
 DROP_DIR=~/android_storage/Callbridge
 
-# 1 = transmettre, 0 = ignorer
+# 1 = forward, 0 = ignore
 FORWARD_SMS=1
 FORWARD_MISSED_CALLS=1
 FORWARD_INCOMING_CALLS=1
 
-# Noms d'application sous lesquels Sailfish publie SMS et appels manqués
-# (utilisés quand la notification ne porte pas de catégorie)
+# App names under which Sailfish posts SMS and missed calls
+# (used when the notification carries no category; Sailfish OS 5 posts
+# SMS as "Messages"). Names may depend on the phone's language.
 SMS_APPS=Messages,commhistoryd,jolla-messages
-MISSED_CALL_APPS=Téléphone,Phone,Appels,voicecall-ui,jolla-voicecall
+MISSED_CALL_APPS=Phone,Téléphone,Appels,voicecall-ui,jolla-voicecall
 
-# Autres notifications natives à transmettre, par catégorie ou par application.
-# Pour connaître les noms exacts, lancer :  callbridge-daemon --debug
-# puis déclencher la notification voulue et lire les lignes « Notify app=… cat=… ».
-# Exemples :
+# Other native notifications to forward, by category or by app name.
+# To find the exact names: stop the service, run  callbridge-daemon --debug
+# then trigger the notification and read the "Notify app=... cat=..." lines.
+# Examples:
 # EXTRA_CATEGORIES=x-nemo.email
 # EXTRA_APPS=harbour-fernschreiber,harbour-whisperfish
 EXTRA_CATEGORIES=
 EXTRA_APPS=
 
-# Chercher le nom de l'appelant dans le carnet d'adresses (1 = oui)
+# Language of the texts shown on the watch (en, fr). Empty = phone language.
+LANGUAGE=
+
+# Look up the caller's name in the address book (1 = yes)
 LOOKUP_CONTACTS=1
 
-# Un événement non lu par Android est effacé au bout de ce délai (secondes)
+# An event not picked up by Android is deleted after this delay (seconds)
 STALE_SECONDS=120
 
-# 1 = journal détaillé (journalctl --user -u callbridge -f)
+# 1 = verbose log (journalctl --user -u callbridge -f)
 DEBUG=0

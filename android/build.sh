@@ -1,6 +1,6 @@
 #!/bin/sh
-# Construit Callbridge.apk sans Gradle ni Android Studio.
-# Prérequis (Debian/Ubuntu) :
+# Builds Callbridge.apk without Gradle or Android Studio.
+# Requirements (Debian/Ubuntu):
 #   apt install openjdk-17-jdk aapt dalvik-exchange zipalign apksigner android-sdk-platform-23
 set -e
 cd "$(dirname "$0")"
@@ -11,21 +11,21 @@ B=build
 rm -rf "$B"
 mkdir -p "$B/gen" "$B/obj"
 
-[ -f res/drawable/ic_launcher.png ] || python3 make_icons.py
+python3 make_icons.py
 
-# 1. Ressources et R.java
+# 1. Resources and R.java
 aapt package -f -m -J "$B/gen" -M AndroidManifest.xml -S res -I "$SDK" \
     -F "$B/unsigned.apk"
 
-# 2. Compilation Java (bytecode Java 8, sans lambda)
+# 2. Compile Java (Java 8 bytecode, no lambdas)
 javac -source 8 -target 8 -bootclasspath "$SDK" -encoding UTF-8 \
     -Xlint:-options -d "$B/obj" "$B"/gen/org/callbridge/relay/R.java \
     src/org/callbridge/relay/*.java
 
-# 3. Conversion en bytecode Dalvik
+# 3. Convert to Dalvik bytecode
 $DX --dex --min-sdk-version=21 --output="$B/classes.dex" "$B/obj"
 
-# 4. Ajout du code dans l'APK, alignement, signature
+# 4. Add code to the APK, align, sign
 (cd "$B" && aapt add unsigned.apk classes.dex >/dev/null)
 zipalign -f -p 4 "$B/unsigned.apk" "$B/aligned.apk"
 
