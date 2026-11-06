@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 
-VERSION = "1.8.0"
+VERSION = "1.8.1"
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -60,9 +60,12 @@ DEFAULTS = {
     # Chercher le nom de l'appelant dans le carnet d'adresses (1 = oui)
     "LOOKUP_CONTACTS": "1",
     # Retirer du centre de notifications Sailfish la copie que fait AppSupport
-    # des notifications de Callbridge (1 = oui) : elles font doublon avec
-    # l'original (SMS, appel). La montre les reçoit quand même.
-    "HIDE_ECHO": "1",
+    # des notifications de Callbridge (1 = oui). DÉSACTIVÉ par défaut :
+    # AppSupport répercute la fermeture côté Android, ce qui annule la
+    # notification avant que l'application de la montre l'ait transmise.
+    "HIDE_ECHO": "0",
+    # Délai avant de fermer la copie (secondes), si HIDE_ECHO=1
+    "ECHO_DELAY": "20",
     # Autres noms sous lesquels la copie peut apparaître (séparés par des virgules)
     "ECHO_APPS": "",
     # Réveiller le relais Android s'il ne répond plus alors qu'Android tourne
@@ -780,7 +783,12 @@ def is_echo(app_name):
 
 def close_notification(nid):
     def run():
-        time.sleep(0.4)       # laisser Sailfish finir d'enregistrer la copie
+        # Laisser à l'application de la montre le temps de transmettre la
+        # notification : la fermer ici l'annule aussi côté Android.
+        try:
+            time.sleep(max(0.4, float(CFG.get("ECHO_DELAY", "20"))))
+        except ValueError:
+            time.sleep(20)
         code = subprocess.call(
             ["dbus-send", "--session", "--type=method_call",
              "--dest=org.freedesktop.Notifications",
@@ -843,7 +851,10 @@ def on_notify(header, args):
         (not category and app in csv_set(CFG["SMS_APPS"]))
     is_missed = category in MISSED_CALL_CATEGORIES or \
         (not category and app in csv_set(CFG["MISSED_CALL_APPS"]))
-    record_seen(app, category, header["sender"], is_sms or is_missed)
+    try:
+        record_seen(app, category, header["sender"], is_sms or is_missed)
+    except Exception as exc:          # ne jamais bloquer la transmission
+        log("recensement impossible:", exc)
     if is_sms:
         kind = "sms" if wants("sms", "FORWARD_SMS") else None
     elif is_missed:

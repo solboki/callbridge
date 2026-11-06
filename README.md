@@ -112,11 +112,11 @@ When AppSupport stops, Android force-stops all its apps. An app stopped this way
 
 The Sailfish service therefore watches the status file of the Android relay. If Android is running but the relay has stopped answering, it opens the Android app with an "autostart" mark: the app starts its relay and closes at once. You may see a window flash briefly. The service tries at most three times per Android start, five minutes apart, so that a missing permission cannot cause endless attempts. This can be turned off with `AUTOSTART_ANDROID=0` in the settings file.
 
-## No duplicates in the notification area
+## Duplicates in the notification area
 
-AppSupport copies every Android notification into the Sailfish notification area. Without care, each SMS or call would appear there twice: once from the native app, once from Callbridge.
+AppSupport copies every Android notification into the Sailfish notification area. Each SMS or call forwarded by Callbridge therefore appears there twice: once from the native app, once from Callbridge.
 
-The service therefore removes these copies as soon as they appear. It spots the copy made for the Callbridge Android app, reads the number Sailfish gives it, and closes it. Garmin Connect has already read the notification on the Android side, so the watch still receives it. A banner may flash for a split second. This can be turned off with `HIDE_ECHO=0` in the settings file.
+Callbridge can remove these copies (`HIDE_ECHO=1` in the settings file), but this is off by default. AppSupport passes the removal on to Android, which cancels the original notification. Removed at once, the notification never reached the watch. The service therefore waits `ECHO_DELAY` seconds (20 by default) before removing the copy. Even then, some watch apps also remove the notification from the watch when it is cancelled on the phone. Try it, and turn it back off if notifications vanish from your watch.
 
 ## Advanced settings
 

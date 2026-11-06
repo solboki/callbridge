@@ -32,9 +32,13 @@ LANGUAGE=
 LOOKUP_CONTACTS=1
 
 # Remove from the Sailfish notification area the copies AppSupport makes of
-# Callbridge's notifications, which duplicate the original SMS or call
-# (1 = yes). The watch still receives them.
-HIDE_ECHO=1
+# Callbridge's notifications (1 = yes). OFF by default: AppSupport passes the
+# removal on to Android, which cancels the notification before the watch app
+# has forwarded it. If you turn it on, keep a delay long enough for the watch
+# to receive the notification; some watch apps then also remove it from the
+# watch.
+HIDE_ECHO=0
+ECHO_DELAY=20
 # Other app names under which these copies may appear, if not recognised.
 # Run  callbridge-daemon --debug  to see the exact name ("Notify app=...").
 ECHO_APPS=

@@ -32,7 +32,7 @@ export DBUS_SESSION_BUS_ADDRESS=$(printf '%s\n' "$BUS" | sed -n 1p)
 BUS_PID=$(printf '%s\n' "$BUS" | sed -n 2p)
 CLOSED_LOG="$WORK/closed.log" python3 "$HERE/fake_bus.py" & FAKE=$!
 sleep 0.8
-HOME="$WORK/home" DROP_DIR="$WORK/drop" OFONO_BUS=session DEBUG=1 LANGUAGE=fr \
+HOME="$WORK/home" DROP_DIR="$WORK/drop" OFONO_BUS=session DEBUG=1 LANGUAGE=fr HIDE_ECHO=1 ECHO_DELAY=0 \
     python3 "$DAEMON" > "$WORK/daemon.log" 2>&1 & DAEMON_PID=$!
 sleep 9
 kill $DAEMON_PID 2>/dev/null
@@ -77,6 +77,12 @@ ALL=$(cat "$WORK/closed.log" 2>/dev/null)
 check "Callbridge echoes closed in Sailfish" 'Callbridge' 2
 check "native notifications left alone" 'commhistoryd' 0
 check "native notifications left alone (Messages)" 'Messages' 0
+
+# QML: a page property named after a built-in one (data, children...) hides
+# everything the page contains, and qmllint does not notice it.
+ALL=$(grep -nE 'property [a-z]+ (data|children|resources|parent|state|states)\b' \
+      "$HERE/../sailfish/app/qml/callbridge.qml")
+check "no QML property shadowing a built-in one" 'property' 0
 
 if [ $FAIL -ne 0 ]; then
     echo; echo "Service log:"; cat "$WORK/daemon.log"

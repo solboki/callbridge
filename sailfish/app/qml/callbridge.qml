@@ -332,8 +332,8 @@ ApplicationWindow {
         id: appsPage
         Page {
             id: page
-            property var data: ({ phone: {}, native: [], android: [] })
-            function load() { py.call("backend.apps", [], function(r) { page.data = r }) }
+            property var info: ({ phone: {}, native: [], android: [] })
+            function load() { py.call("backend.apps", [], function(r) { page.info = r }) }
             Component.onCompleted: load()
             onStatusChanged: if (status === PageStatus.Active) load()
 
@@ -377,7 +377,7 @@ ApplicationWindow {
                         ]
                         TextSwitch {
                             text: modelData.label
-                            checked: page.data.phone[modelData.key] !== false
+                            checked: page.info.phone[modelData.key] !== false
                             automaticCheck: false
                             onClicked: py.call("backend.set_phone", [modelData.key, !checked],
                                                function() { page.load() })
@@ -398,13 +398,13 @@ ApplicationWindow {
                     Item { width: 1; height: Theme.paddingMedium }
 
                     ViewPlaceholder {
-                        enabled: page.data.native.length === 0
+                        enabled: page.info.native.length === 0
                         text: t("No app yet")
                         hintText: t("Leave the service running: apps will show up as they send notifications.")
                     }
 
                     Repeater {
-                        model: page.data.native
+                        model: page.info.native
                         TextSwitch {
                             text: modelData.name
                             description: page.lastSeen(modelData.last)
@@ -416,12 +416,12 @@ ApplicationWindow {
                     }
 
                     SectionHeader {
-                        visible: page.data.android.length > 0
+                        visible: page.info.android.length > 0
                         text: t("Android apps")
                     }
 
                     Label {
-                        visible: page.data.android.length > 0
+                        visible: page.info.android.length > 0
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         wrapMode: Text.Wrap
@@ -431,7 +431,7 @@ ApplicationWindow {
                     }
 
                     Repeater {
-                        model: page.data.android
+                        model: page.info.android
                         Label {
                             x: Theme.horizontalPageMargin
                             width: parent.width - 2 * x

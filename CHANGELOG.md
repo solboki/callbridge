@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.1 (6 November 2026)
+
+Fixes the "Forwarded apps" page, which stayed empty: one of its properties was named after a built-in QML property and hid the whole page.
+
+Calls and SMS reach the watch again. Removing duplicate copies in Sailfish (1.7.0) also cancelled the notification on the Android side, before the watch app had forwarded it. This is now off by default, and when turned on, it waits 20 seconds (`ECHO_DELAY`).
+
+The list of apps can no longer block forwarding if it fails to update.
+
 ## 1.8.0 (6 November 2026)
 
 Any native Sailfish app can now send its notifications to the watch. A new "Forwarded apps" page in the settings app lists the apps that have notified since the service started, with a switch for each; their notifications reach the watch with the app's name in front. The same page turns incoming calls, missed calls and SMS on or off. Choices take effect at once.

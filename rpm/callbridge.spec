@@ -1,5 +1,5 @@
 Name:           callbridge
-Version:        1.8.0
+Version:        1.8.1
 Release:        1
 Summary:        Forwards native Sailfish OS calls and SMS to Android AppSupport
 License:        GPL-3.0-or-later
@@ -86,6 +86,10 @@ exit 0
 %{_datadir}/icons/hicolor/*/apps/callbridge.png
 
 %changelog
+* Fri Nov 06 2026 Boris Solodki <solboki@solodki.fr> - 1.8.1-1
+- Fix empty "Forwarded apps" page.
+- Echo removal off by default (it cancelled notifications before the watch got them).
+
 * Fri Nov 06 2026 Boris Solodki <solboki@solodki.fr> - 1.8.0-1
 - "Forwarded apps" page: choose which native apps reach the watch.
 
