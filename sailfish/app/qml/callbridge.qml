@@ -36,6 +36,27 @@ ApplicationWindow {
         "Send test notification": "Envoyer une notification de test",
         "Test from the Callbridge settings app": "Test depuis l'application Callbridge",
         "Refresh": "Actualiser",
+        "Choose apps": "Choisir les applications",
+        "Forward notifications to the watch": "Transmettre les notifications à la montre",
+        "Forwarded apps": "Applications transmises",
+        "Calls, SMS and the native apps of your choice": "Appels, SMS et les applications natives de votre choix",
+        "Clear the list of apps": "Vider la liste des applications",
+        "Clearing the list": "Vidage de la liste",
+        "Phone": "Téléphone",
+        "Incoming calls": "Appels entrants",
+        "Missed calls": "Appels manqués",
+        "SMS": "SMS",
+        "Native apps": "Applications natives",
+        "An app appears here after its first notification, while the service is running. Turn it on to send its notifications to the watch.":
+            "Une application apparaît ici après sa première notification, tant que le service fonctionne. Activez-la pour envoyer ses notifications à la montre.",
+        "No app yet": "Aucune application pour l'instant",
+        "Leave the service running: apps will show up as they send notifications.":
+            "Laissez le service fonctionner : les applications apparaîtront à mesure qu'elles notifient.",
+        "Android apps": "Applications Android",
+        "These apps run in AppSupport: your watch app already sees their notifications. Choose them in the watch app itself.":
+            "Ces applications tournent dans AppSupport : l'application de la montre voit déjà leurs notifications. Choisissez-les dans l'application de la montre elle-même.",
+        "Last notification: ": "Dernière notification : ",
+        "Not seen since the list was cleared": "Pas vue depuis le vidage de la liste",
         "Test sent: it should reach your watch within a few seconds.":
             "Test envoyé : il doit arriver sur la montre en quelques secondes.",
         "Confirm the installation in the dialog, then open the Android app to grant its permissions.":
@@ -96,6 +117,10 @@ ApplicationWindow {
 
                 PullDownMenu {
                     MenuItem {
+                        text: t("Choose apps")
+                        onClicked: pageStack.push(appsPage)
+                    }
+                    MenuItem {
                         text: t("Refresh")
                         onClicked: app.refresh()
                     }
@@ -114,13 +139,42 @@ ApplicationWindow {
 
                     TextSwitch {
                         id: serviceSwitch
-                        text: t("Forward calls and SMS")
+                        text: t("Forward notifications to the watch")
                         description: st.active ? t("Running") : t("Stopped")
                         checked: st.enabled === true
                         automaticCheck: false
                         onClicked: {
                             var want = !checked
                             py.call("backend.set_enabled", [want], function(r) { app.report(r) })
+                        }
+                    }
+
+                    BackgroundItem {
+                        width: parent.width
+                        height: Theme.itemSizeMedium
+                        onClicked: pageStack.push(appsPage)
+                        Column {
+                            x: Theme.horizontalPageMargin
+                            width: parent.width - 2 * x - forwardIcon.width
+                            anchors.verticalCenter: parent.verticalCenter
+                            Label {
+                                text: t("Forwarded apps")
+                                color: parent.parent.highlighted ? Theme.highlightColor : Theme.primaryColor
+                            }
+                            Label {
+                                width: parent.width
+                                truncationMode: TruncationMode.Fade
+                                font.pixelSize: Theme.fontSizeExtraSmall
+                                color: Theme.secondaryColor
+                                text: t("Calls, SMS and the native apps of your choice")
+                            }
+                        }
+                        Icon {
+                            id: forwardIcon
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.horizontalPageMargin
+                            anchors.verticalCenter: parent.verticalCenter
+                            source: "image://theme/icon-m-right"
                         }
                     }
 
@@ -266,6 +320,127 @@ ApplicationWindow {
                         color: Theme.highlightColor
                         font.pixelSize: Theme.fontSizeSmall
                         text: app.message
+                    }
+                }
+
+                VerticalScrollDecorator {}
+            }
+        }
+    }
+
+    Component {
+        id: appsPage
+        Page {
+            id: page
+            property var data: ({ phone: {}, native: [], android: [] })
+            function load() { py.call("backend.apps", [], function(r) { page.data = r }) }
+            Component.onCompleted: load()
+            onStatusChanged: if (status === PageStatus.Active) load()
+
+            function lastSeen(ts) {
+                if (!ts) return t("Not seen since the list was cleared")
+                return t("Last notification: ") + Qt.formatDateTime(new Date(ts * 1000), "d MMM, hh:mm")
+            }
+
+            RemorsePopup { id: clearRemorse }
+
+            SilicaFlickable {
+                anchors.fill: parent
+                contentHeight: appsColumn.height + Theme.paddingLarge
+
+                PullDownMenu {
+                    MenuItem {
+                        text: t("Clear the list of apps")
+                        onClicked: clearRemorse.execute(t("Clearing the list"), function() {
+                            py.call("backend.forget_seen", [], function() { page.load() })
+                        })
+                    }
+                    MenuItem {
+                        text: t("Refresh")
+                        onClicked: page.load()
+                    }
+                }
+
+                Column {
+                    id: appsColumn
+                    width: parent.width
+
+                    PageHeader { title: t("Forwarded apps") }
+
+                    SectionHeader { text: t("Phone") }
+
+                    Repeater {
+                        model: [
+                            { key: "calls",  label: t("Incoming calls") },
+                            { key: "missed", label: t("Missed calls") },
+                            { key: "sms",    label: t("SMS") }
+                        ]
+                        TextSwitch {
+                            text: modelData.label
+                            checked: page.data.phone[modelData.key] !== false
+                            automaticCheck: false
+                            onClicked: py.call("backend.set_phone", [modelData.key, !checked],
+                                               function() { page.load() })
+                        }
+                    }
+
+                    SectionHeader { text: t("Native apps") }
+
+                    Label {
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeExtraSmall
+                        color: Theme.secondaryHighlightColor
+                        text: t("An app appears here after its first notification, while the service is running. Turn it on to send its notifications to the watch.")
+                    }
+
+                    Item { width: 1; height: Theme.paddingMedium }
+
+                    ViewPlaceholder {
+                        enabled: page.data.native.length === 0
+                        text: t("No app yet")
+                        hintText: t("Leave the service running: apps will show up as they send notifications.")
+                    }
+
+                    Repeater {
+                        model: page.data.native
+                        TextSwitch {
+                            text: modelData.name
+                            description: page.lastSeen(modelData.last)
+                            checked: modelData.enabled
+                            automaticCheck: false
+                            onClicked: py.call("backend.set_app", [modelData.name, !checked],
+                                               function() { page.load() })
+                        }
+                    }
+
+                    SectionHeader {
+                        visible: page.data.android.length > 0
+                        text: t("Android apps")
+                    }
+
+                    Label {
+                        visible: page.data.android.length > 0
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeExtraSmall
+                        color: Theme.secondaryHighlightColor
+                        text: t("These apps run in AppSupport: your watch app already sees their notifications. Choose them in the watch app itself.")
+                    }
+
+                    Repeater {
+                        model: page.data.android
+                        Label {
+                            x: Theme.horizontalPageMargin
+                            width: parent.width - 2 * x
+                            height: implicitHeight + Theme.paddingSmall
+                            verticalAlignment: Text.AlignBottom
+                            truncationMode: TruncationMode.Fade
+                            color: Theme.secondaryColor
+                            text: modelData.name
+                        }
                     }
                 }
 

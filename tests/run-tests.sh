@@ -23,6 +23,10 @@ db.execute("insert into PhoneNumbers values (1, 1, '06 12 34 56 78', '')")
 db.commit()
 EOF
 
+# The user chose to forward "Mail", but not "Weather"
+mkdir -p "$WORK/home/.config/callbridge"
+echo '{"apps": ["Mail"]}' > "$WORK/home/.config/callbridge/apps.json"
+
 BUS=$(dbus-daemon --session --fork --print-address=1 --print-pid=1)
 export DBUS_SESSION_BUS_ADDRESS=$(printf '%s\n' "$BUS" | sed -n 1p)
 BUS_PID=$(printf '%s\n' "$BUS" | sed -n 2p)
@@ -58,6 +62,16 @@ check "incoming call with name found in address book" \
 check "private number" '"text": "Numéro masqué"'
 check "call removed when answered or ended" '"action": "cancel"' 2
 check "outgoing call ignored" '0611' 0
+
+check "chosen native app forwarded with its name" \
+      '"title": "Mail · Bob", "text": "Meeting moved to 3 pm"'
+check "native app not chosen is not forwarded" 'Rain expected' 0
+
+SEEN=$(cat "$WORK/home/.config/callbridge/seen-apps.json" 2>/dev/null)
+ALL="$SEEN"
+check "app not chosen still listed for the settings app" '"Weather"'
+check "SMS and phone apps flagged as built-in" '"builtin": true' 2
+check "no notification content stored in the list" 'Rain expected' 0
 
 ALL=$(cat "$WORK/closed.log" 2>/dev/null)
 check "Callbridge echoes closed in Sailfish" 'Callbridge' 2

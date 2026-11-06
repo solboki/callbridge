@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.0 (6 November 2026)
+
+Any native Sailfish app can now send its notifications to the watch. A new "Forwarded apps" page in the settings app lists the apps that have notified since the service started, with a switch for each; their notifications reach the watch with the app's name in front. The same page turns incoming calls, missed calls and SMS on or off. Choices take effect at once.
+
+Android apps are recognised and listed apart, since the watch app already sees them. The list keeps only app names and dates, never notification content.
+
 ## 1.7.0 (6 November 2026)
 
 No more duplicates in the Sailfish notification area. AppSupport copies each Callbridge notification into Sailfish, so every SMS and call appeared twice. The service now closes these copies as soon as Sailfish registers them; the watch still receives the notification. Can be turned off with `HIDE_ECHO=0`.

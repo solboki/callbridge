@@ -77,6 +77,8 @@ async def main():
     await notify("Messages", "Alice Martin", "Essai3", "")
     await notify("Callbridge", "Alice Martin", "Essai3 echo", "")
     await notify("Callbridge Android", "Alice Martin", "Essai3 echo 2", "")
+    await notify("Mail", "Bob", "Meeting moved to 3 pm", "x-nemo.email")
+    await notify("Weather", "Rain", "Rain expected at 5 pm", "")
     # known incoming call then answered; private call then hung up;
     # outgoing call (must be ignored)
     mgr.CallAdded("/ril_0/voicecall01", {

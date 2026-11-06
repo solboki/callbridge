@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -667,6 +667,108 @@ def seen_recently(sig, window=8.0):
 # Connect, lui, a déjà lu la notification côté Android : la montre la reçoit.
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# Choix des applications (fichier écrit par l'application de réglage)
+#
+# ~/.config/callbridge/apps.json :
+#   {"sms": true, "missed": true, "calls": true, "apps": ["Courriel", ...]}
+# Les clés absentes reprennent les valeurs du fichier callbridge.conf.
+#
+# ~/.config/callbridge/seen-apps.json : applications natives ayant déjà
+# publié une notification, pour que l'interface puisse les proposer. Seuls
+# le nom, la catégorie, la date et l'origine (native ou Android) y figurent,
+# jamais le contenu des notifications.
+# --------------------------------------------------------------------------
+
+APPS_FILE = os.path.expanduser("~/.config/callbridge/apps.json")
+SEEN_FILE = os.path.expanduser("~/.config/callbridge/seen-apps.json")
+_choices = {"mtime": None, "data": {}}
+_seen = {"data": None, "saved": 0.0}
+_seen_lock = threading.Lock()
+_origins = {}             # expéditeur D-Bus -> "native" ou "android"
+
+
+def choices():
+    try:
+        mtime = os.path.getmtime(APPS_FILE)
+    except OSError:
+        _choices.update(mtime=None, data={})
+        return {}
+    if mtime != _choices["mtime"]:
+        try:
+            with open(APPS_FILE, encoding="utf-8") as fh:
+                data = json.load(fh)
+            _choices.update(mtime=mtime, data=data if isinstance(data, dict) else {})
+        except (OSError, ValueError) as exc:
+            log("apps.json illisible:", exc)
+    return _choices["data"]
+
+
+def wants(key, conf_key):
+    value = choices().get(key)
+    if isinstance(value, bool):
+        return value
+    return CFG[conf_key] == "1"
+
+
+def selected_apps():
+    apps = choices().get("apps")
+    return set(apps) if isinstance(apps, list) else set()
+
+
+def sender_origin(sender):
+    """Native (Sailfish) ou Android (copie faite par AppSupport) ?"""
+    if sender in _origins:
+        return _origins[sender]
+    origin = "native"
+    try:
+        out = subprocess.run(
+            ["dbus-send", "--session", "--print-reply",
+             "--dest=org.freedesktop.DBus", "/org/freedesktop/DBus",
+             "org.freedesktop.DBus.GetConnectionUnixProcessID",
+             "string:" + sender],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            universal_newlines=True, timeout=3).stdout
+        pid = re.search(r"uint32 (\d+)", out).group(1)
+        with open("/proc/%s/cmdline" % pid, "rb") as fh:
+            cmd = fh.read().replace(b"\0", b" ").decode("utf-8", "replace").lower()
+        if any(w in cmd for w in ("apkd", "appsupport", "alien", "aliendalvik")):
+            origin = "android"
+    except Exception:
+        pass
+    _origins[sender] = origin
+    return origin
+
+
+def record_seen(app, category, sender, builtin):
+    with _seen_lock:
+        if _seen["data"] is None:
+            try:
+                with open(SEEN_FILE, encoding="utf-8") as fh:
+                    _seen["data"] = json.load(fh)
+            except (OSError, ValueError):
+                _seen["data"] = {}
+        data = _seen["data"]
+        now = int(time.time())
+        entry = data.get(app)
+        is_new = entry is None
+        if is_new:
+            entry = data[app] = {"count": 0}
+        entry.update(category=category, last=now, builtin=builtin,
+                     origin=sender_origin(sender))
+        entry["count"] = entry.get("count", 0) + 1
+        if is_new or time.time() - _seen["saved"] > 60:
+            try:
+                os.makedirs(os.path.dirname(SEEN_FILE), exist_ok=True)
+                tmp = SEEN_FILE + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh, ensure_ascii=False, indent=1)
+                os.rename(tmp, SEEN_FILE)
+                _seen["saved"] = time.time()
+            except OSError as exc:
+                dbg("seen-apps.json:", exc)
+
+
 _echo_calls = {}          # (expéditeur, numéro de série) -> heure de l'appel
 _echo_lock = threading.Lock()
 
@@ -737,17 +839,21 @@ def on_notify(header, args):
     app = str(app_name)
     kind = None
     by_app = False
-    if category in SMS_CATEGORIES:
-        kind = "sms" if CFG["FORWARD_SMS"] == "1" else None
-    elif category in MISSED_CALL_CATEGORIES:
-        kind = "missed" if CFG["FORWARD_MISSED_CALLS"] == "1" else None
-    elif not category and app in csv_set(CFG["SMS_APPS"]):
-        kind = "sms" if CFG["FORWARD_SMS"] == "1" else None
-    elif not category and app in csv_set(CFG["MISSED_CALL_APPS"]):
-        kind = "missed" if CFG["FORWARD_MISSED_CALLS"] == "1" else None
-        by_app = True
-    elif category in csv_set(CFG["EXTRA_CATEGORIES"]) or \
-            str(app_name) in csv_set(CFG["EXTRA_APPS"]):
+    is_sms = category in SMS_CATEGORIES or \
+        (not category and app in csv_set(CFG["SMS_APPS"]))
+    is_missed = category in MISSED_CALL_CATEGORIES or \
+        (not category and app in csv_set(CFG["MISSED_CALL_APPS"]))
+    record_seen(app, category, header["sender"], is_sms or is_missed)
+    if is_sms:
+        kind = "sms" if wants("sms", "FORWARD_SMS") else None
+    elif is_missed:
+        kind = "missed" if wants("missed", "FORWARD_MISSED_CALLS") else None
+        by_app = category not in MISSED_CALL_CATEGORIES
+    elif app in selected_apps() or category in csv_set(CFG["EXTRA_CATEGORIES"]) \
+            or app in csv_set(CFG["EXTRA_APPS"]):
+        if sender_origin(header["sender"]) == "android":
+            dbg("notification Android ignorée (déjà vue par l'application de la montre)")
+            return
         kind = "other"
     if not kind:
         return
@@ -764,6 +870,10 @@ def on_notify(header, args):
         title = tr("Missed call")
         text = summary if not body or body == summary else \
             "%s : %s" % (summary, body)
+    elif kind == "other":
+        # La montre affiche « Callbridge » comme source : on rappelle l'application.
+        title = "%s · %s" % (app, summary) if summary else app
+        text = body
     else:
         title, text = summary, body
     drop({"action": "post", "kind": kind,
@@ -848,6 +958,8 @@ def on_ofono(header, args):
         dbg("CallAdded", path, props)
         if state not in ("incoming", "waiting"):
             return
+        if not wants("calls", "FORWARD_INCOMING_CALLS"):
+            return
         number = props.get("LineIdentification") or ""
         if number in ("withheld", ""):
             number = ""
@@ -919,13 +1031,14 @@ def main():
          "member='Notify'",
          "type='method_return',sender='org.freedesktop.Notifications'"],
         on_session)))
-    if CFG["FORWARD_INCOMING_CALLS"] == "1":
-        threads.append(threading.Thread(target=monitor, daemon=True, args=(
-            CFG["OFONO_BUS"],
-            ["type='signal',interface='org.ofono.VoiceCallManager'",
-             "type='signal',interface='org.ofono.VoiceCall',"
-             "member='PropertyChanged'"],
-            on_ofono)))
+    # Toujours à l'écoute d'oFono : le choix « appels entrants » se lit à
+    # chaque appel, pour qu'un changement dans l'interface s'applique aussitôt.
+    threads.append(threading.Thread(target=monitor, daemon=True, args=(
+        CFG["OFONO_BUS"],
+        ["type='signal',interface='org.ofono.VoiceCallManager'",
+         "type='signal',interface='org.ofono.VoiceCall',"
+         "member='PropertyChanged'"],
+        on_ofono)))
     for t in threads:
         t.start()
     try:

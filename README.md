@@ -48,7 +48,7 @@ The third part is a native Sailfish settings app, called Callbridge, which lets 
 
 **Missed calls** arrive as Sailfish shows them in its notification area.
 
-Other native notifications can be added through the settings file, for example e-mails (see "Advanced settings").
+**Other native apps** can be added in the settings app, under "Forwarded apps" (see below). Their notifications reach the watch with the app's name in front, for example "Mail · Bob".
 
 Texts shown on the watch follow the phone's language: English, or French on a phone set to French.
 
@@ -100,6 +100,12 @@ Uninstalling goes through Android's own dialog. Android only lets an open app as
 
 The **Test** button sends a notification through the whole chain, from Sailfish to the watch.
 
+The **Forwarded apps** page, opened from the main screen, chooses what reaches the watch. Its "Phone" section turns incoming calls, missed calls and SMS on or off. Its "Native apps" section lists the Sailfish apps that have sent at least one notification since the service started, with a switch for each. An app therefore appears only after its first notification: leave the service running, and the list fills up on its own. Only the app's name, the time of its last notification and how often it notifies are kept, never the content of notifications.
+
+Android apps are listed apart, without a switch: they run in AppSupport, so your watch app already sees their notifications, and you choose them in the watch app itself. Forwarding them again would only create duplicates.
+
+The choices are saved in `~/.config/callbridge/apps.json` and take effect at once, without restarting the service.
+
 ## After a restart
 
 When AppSupport stops, Android force-stops all its apps. An app stopped this way no longer receives Android's start-up signal until it is opened by hand. Without help, the relay would stay silent after every restart of the phone or of AppSupport.
@@ -125,7 +131,7 @@ Edit it, then restart the service with `systemctl --user restart callbridge`, or
 
 The first three settings turn each kind of event on or off: SMS, missed calls and incoming calls.
 
-The `EXTRA_CATEGORIES` and `EXTRA_APPS` settings add other native notifications. For instance, `EXTRA_CATEGORIES=x-nemo.email` forwards e-mails from the Sailfish Mail app. To find the exact name of a notification, stop the service, run it by hand in verbose mode, then trigger the notification you want:
+The `EXTRA_CATEGORIES` and `EXTRA_APPS` settings add other native notifications without going through the settings app, which is easier for most people. For instance, `EXTRA_CATEGORIES=x-nemo.email` forwards e-mails from the Sailfish Mail app. To find the exact name of a notification, stop the service, run it by hand in verbose mode, then trigger the notification you want:
 
 ```
 systemctl --user stop callbridge

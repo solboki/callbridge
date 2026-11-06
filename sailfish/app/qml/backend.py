@@ -241,3 +241,97 @@ def send_test(text):
     _drop({"action": "post", "kind": "test", "key": "test",
            "title": "Callbridge", "text": text})
     return {"ok": True, "message": ""}
+
+
+# ---------------------------------------------------------------------------
+# Choice of forwarded apps (read by the service at each notification)
+# ---------------------------------------------------------------------------
+
+APPS_FILE = os.path.join(CONF_DIR, "apps.json")
+SEEN_FILE = os.path.join(CONF_DIR, "seen-apps.json")
+CONF_KEYS = {"sms": "FORWARD_SMS", "missed": "FORWARD_MISSED_CALLS",
+             "calls": "FORWARD_INCOMING_CALLS"}
+
+
+def _load(path, default):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, type(default)) else default
+    except (OSError, ValueError):
+        return default
+
+
+def _save(path, data):
+    os.makedirs(CONF_DIR, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=1)
+    os.rename(tmp, path)
+
+
+def _conf_value(key):
+    """Value of a setting in callbridge.conf, "1" when absent."""
+    try:
+        with open(os.path.join(CONF_DIR, "callbridge.conf"), encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith(key + "="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return "1"
+
+
+def apps():
+    """Phone switches and the list of native apps seen so far, newest first."""
+    choice = _load(APPS_FILE, {})
+    selected = set(choice.get("apps") or [])
+    phone = {k: choice[k] if isinstance(choice.get(k), bool) else _conf_value(v) == "1"
+             for k, v in CONF_KEYS.items()}
+    seen = _load(SEEN_FILE, {})
+    native, android = [], []
+    for name, info in seen.items():
+        if not isinstance(info, dict) or info.get("builtin"):
+            continue
+        item = {"name": name, "enabled": name in selected,
+                "last": int(info.get("last", 0)), "count": int(info.get("count", 0))}
+        (android if info.get("origin") == "android" else native).append(item)
+    # Apps chosen earlier but not seen since the list was cleared
+    for name in selected - set(seen):
+        native.append({"name": name, "enabled": True, "last": 0, "count": 0})
+    native.sort(key=lambda a: (-a["last"], a["name"].lower()))
+    android.sort(key=lambda a: a["name"].lower())
+    return {"phone": phone, "native": native, "android": android}
+
+
+def set_phone(key, enabled):
+    if key not in CONF_KEYS:
+        return {"ok": False, "message": key}
+    choice = _load(APPS_FILE, {})
+    choice[key] = bool(enabled)
+    _save(APPS_FILE, choice)
+    return {"ok": True, "message": ""}
+
+
+def set_app(name, enabled):
+    choice = _load(APPS_FILE, {})
+    selected = [a for a in (choice.get("apps") or []) if a != name]
+    if enabled:
+        selected.append(name)
+    choice["apps"] = sorted(selected, key=str.lower)
+    _save(APPS_FILE, choice)
+    return {"ok": True, "message": ""}
+
+
+def forget_seen():
+    """Clears the list of seen apps; selected apps stay selected."""
+    try:
+        os.remove(SEEN_FILE)
+    except FileNotFoundError:
+        pass
+    # The service keeps its own copy in memory: restart it so it starts afresh.
+    if not os.path.exists(DISABLED_FLAG):
+        _systemctl("restart", SERVICE)
+    return {"ok": True, "message": ""}
+
