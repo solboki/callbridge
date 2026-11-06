@@ -2,6 +2,7 @@
 missed-call notifications (org.freedesktop.Notifications) and oFono call
 signals. Used by run-tests.sh."""
 import asyncio
+import os
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, method, signal
 from dbus_next import Variant, BusType
@@ -10,11 +11,23 @@ from dbus_next import Variant, BusType
 class Notif(ServiceInterface):
     def __init__(self):
         super().__init__("org.freedesktop.Notifications")
+        self.next_id = 100
+        self.apps = {}
 
     @method()
     def Notify(self, app: 's', rid: 'u', icon: 's', summary: 's', body: 's',
                actions: 'as', hints: 'a{sv}', timeout: 'i') -> 'u':
-        return 1
+        self.next_id += 1
+        self.apps[self.next_id] = app
+        return self.next_id
+
+    @method()
+    def CloseNotification(self, nid: 'u'):
+        # Records which notifications the service closed, for run-tests.sh
+        log = os.environ.get("CLOSED_LOG")
+        if log:
+            with open(log, "a") as fh:
+                fh.write("%d %s\n" % (nid, self.apps.get(nid, "?")))
 
 
 class Mgr(ServiceInterface):
@@ -63,6 +76,7 @@ async def main():
     await notify("foo", "Ignore", "x", "x-other")
     await notify("Messages", "Alice Martin", "Essai3", "")
     await notify("Callbridge", "Alice Martin", "Essai3 echo", "")
+    await notify("Callbridge Android", "Alice Martin", "Essai3 echo 2", "")
     # known incoming call then answered; private call then hung up;
     # outgoing call (must be ignored)
     mgr.CallAdded("/ril_0/voicecall01", {

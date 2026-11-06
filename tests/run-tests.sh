@@ -26,7 +26,7 @@ EOF
 BUS=$(dbus-daemon --session --fork --print-address=1 --print-pid=1)
 export DBUS_SESSION_BUS_ADDRESS=$(printf '%s\n' "$BUS" | sed -n 1p)
 BUS_PID=$(printf '%s\n' "$BUS" | sed -n 2p)
-python3 "$HERE/fake_bus.py" & FAKE=$!
+CLOSED_LOG="$WORK/closed.log" python3 "$HERE/fake_bus.py" & FAKE=$!
 sleep 0.8
 HOME="$WORK/home" DROP_DIR="$WORK/drop" OFONO_BUS=session DEBUG=1 LANGUAGE=fr \
     python3 "$DAEMON" > "$WORK/daemon.log" 2>&1 & DAEMON_PID=$!
@@ -58,6 +58,11 @@ check "incoming call with name found in address book" \
 check "private number" '"text": "Numéro masqué"'
 check "call removed when answered or ended" '"action": "cancel"' 2
 check "outgoing call ignored" '0611' 0
+
+ALL=$(cat "$WORK/closed.log" 2>/dev/null)
+check "Callbridge echoes closed in Sailfish" 'Callbridge' 2
+check "native notifications left alone" 'commhistoryd' 0
+check "native notifications left alone (Messages)" 'Messages' 0
 
 if [ $FAIL -ne 0 ]; then
     echo; echo "Service log:"; cat "$WORK/daemon.log"

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0 (6 November 2026)
+
+No more duplicates in the Sailfish notification area. AppSupport copies each Callbridge notification into Sailfish, so every SMS and call appeared twice. The service now closes these copies as soon as Sailfish registers them; the watch still receives the notification. Can be turned off with `HIDE_ECHO=0`.
+
 ## 1.6.0 (2 November 2026)
 
 The Android relay restarts on its own after a restart of the phone or of AppSupport. Android force-stops its apps when AppSupport stops, and a force-stopped app no longer receives the start-up signal until opened by hand. The Sailfish service now notices when the relay stops answering while Android runs, and opens the Android app silently so that it restarts its relay (at most three attempts per Android start).

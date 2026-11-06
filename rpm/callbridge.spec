@@ -1,5 +1,5 @@
 Name:           callbridge
-Version:        1.6.0
+Version:        1.7.0
 Release:        1
 Summary:        Forwards native Sailfish OS calls and SMS to Android AppSupport
 License:        GPL-3.0-or-later
@@ -86,6 +86,9 @@ exit 0
 %{_datadir}/icons/hicolor/*/apps/callbridge.png
 
 %changelog
+* Fri Nov 06 2026 Boris Solodki <solboki@solodki.fr> - 1.7.0-1
+- Copies of Callbridge notifications removed from the Sailfish notification area.
+
 * Mon Nov 02 2026 Boris Solodki <solboki@solodki.fr> - 1.6.0-1
 - Watchdog: wakes the Android relay after AppSupport restarts.
 - Unique notification keys (oFono reuses call paths).

@@ -31,6 +31,14 @@ LANGUAGE=
 # Look up the caller's name in the address book (1 = yes)
 LOOKUP_CONTACTS=1
 
+# Remove from the Sailfish notification area the copies AppSupport makes of
+# Callbridge's notifications, which duplicate the original SMS or call
+# (1 = yes). The watch still receives them.
+HIDE_ECHO=1
+# Other app names under which these copies may appear, if not recognised.
+# Run  callbridge-daemon --debug  to see the exact name ("Notify app=...").
+ECHO_APPS=
+
 # Wake the Android relay when it stops answering while Android runs (1 = yes).
 # After AppSupport restarts, Android only restarts apps that were opened by
 # hand; the service opens Callbridge silently instead.

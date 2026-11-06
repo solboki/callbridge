@@ -106,6 +106,12 @@ When AppSupport stops, Android force-stops all its apps. An app stopped this way
 
 The Sailfish service therefore watches the status file of the Android relay. If Android is running but the relay has stopped answering, it opens the Android app with an "autostart" mark: the app starts its relay and closes at once. You may see a window flash briefly. The service tries at most three times per Android start, five minutes apart, so that a missing permission cannot cause endless attempts. This can be turned off with `AUTOSTART_ANDROID=0` in the settings file.
 
+## No duplicates in the notification area
+
+AppSupport copies every Android notification into the Sailfish notification area. Without care, each SMS or call would appear there twice: once from the native app, once from Callbridge.
+
+The service therefore removes these copies as soon as they appear. It spots the copy made for the Callbridge Android app, reads the number Sailfish gives it, and closes it. Garmin Connect has already read the notification on the Android side, so the watch still receives it. A banner may flash for a split second. This can be turned off with `HIDE_ECHO=0` in the settings file.
+
 ## Advanced settings
 
 Advanced settings live in a text file. To create it, copy the bundled template:
@@ -169,8 +175,6 @@ devel-su appsupport-attach am broadcast -a org.callbridge.relay.POST -n org.call
 You see the call on the watch, but you cannot answer or decline it from your wrist.
 
 The watch shows a message icon, even for a call. Garmin Connect picks the icon itself, following rules it does not document and which seem to rely on a fixed list of known apps. A presentation imitating Android's own phone apps was tried without success, then removed.
-
-Sailfish copies Android notifications into its own notification area. An SMS may therefore appear there twice.
 
 Hiding the Android icon relies on the Sailfish home screen honouring `NoDisplay=true`. When the launcher file cannot be edited, it also relies on the home screen reading `~/.local/share/applications`. This has not yet been confirmed on every Sailfish version.
 
