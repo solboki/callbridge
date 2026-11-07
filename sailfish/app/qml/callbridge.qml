@@ -273,7 +273,6 @@ ApplicationWindow {
                         id: levelBox
                         enabled: app.relayAlive
                         label: t("On the phone")
-                        description: t("How Callbridge notifications appear on the phone itself. The watch receives them in every case, unless your watch app skips the quietest ones.")
                         readonly property var levels: ["high", "low", "min"]
                         currentIndex: {
                             var l = st.relay && st.relay.level ? st.relay.level : "low"
@@ -284,12 +283,25 @@ ApplicationWindow {
                             MenuItem { text: t("Sound and banner") }
                             MenuItem { text: t("Silent") }
                             MenuItem { text: t("As discreet as possible") }
+                            // "activated" belongs to ContextMenu, not to ComboBox
+                            onActivated: py.call("backend.set_level", [levelBox.levels[index]],
+                                                 function(r) {
+                                app.message = t("Request sent to the Android app.")
+                                app.refresh()
+                            })
                         }
-                        onActivated: py.call("backend.set_level", [levels[index]], function(r) {
-                            app.message = t("Request sent to the Android app.")
-                            app.refresh()
-                        })
                     }
+
+                    Label {
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeExtraSmall
+                        color: Theme.secondaryHighlightColor
+                        text: t("How Callbridge notifications appear on the phone itself. The watch receives them in every case, unless your watch app skips the quietest ones.")
+                    }
+
+                    Item { width: 1; height: Theme.paddingMedium }
 
                     TextSwitch {
                         enabled: st.androidLauncher !== undefined && st.androidLauncher !== ""

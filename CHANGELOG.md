@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.1 (7 November 2026)
+
+Fixes the settings app of 1.9.0, whose main screen could fail to load: the handler of the new "On the phone" selector was attached to the selector instead of its menu.
+
 ## 1.9.0 (7 November 2026)
 
 Callbridge notifications are now silent on the phone. They were posted with a high priority, which AppSupport turned into a sound and a banner in Sailfish. A new "On the phone" setting chooses between "Silent" (default), "As discreet as possible" and "Sound and banner".
