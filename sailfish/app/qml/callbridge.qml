@@ -37,6 +37,13 @@ ApplicationWindow {
         "Test from the Callbridge settings app": "Test depuis l'application Callbridge",
         "Refresh": "Actualiser",
         "Choose apps": "Choisir les applications",
+        "On the phone": "Sur le téléphone",
+        "How Callbridge notifications appear on the phone itself. The watch receives them in every case, unless your watch app skips the quietest ones.":
+            "Comportement des notifications Callbridge sur le téléphone lui-même. La montre les reçoit dans tous les cas, sauf si son application ignore les plus discrètes.",
+        "Sound and banner": "Son et bannière",
+        "Silent": "Silencieuses",
+        "As discreet as possible": "Le plus discret possible",
+        "Request sent to the Android app.": "Demande transmise à l'application Android.",
         "Forward notifications to the watch": "Transmettre les notifications à la montre",
         "Forwarded apps": "Applications transmises",
         "Calls, SMS and the native apps of your choice": "Appels, SMS et les applications natives de votre choix",
@@ -260,6 +267,28 @@ ApplicationWindow {
                                 })
                             }
                         }
+                    }
+
+                    ComboBox {
+                        id: levelBox
+                        enabled: app.relayAlive
+                        label: t("On the phone")
+                        description: t("How Callbridge notifications appear on the phone itself. The watch receives them in every case, unless your watch app skips the quietest ones.")
+                        readonly property var levels: ["high", "low", "min"]
+                        currentIndex: {
+                            var l = st.relay && st.relay.level ? st.relay.level : "low"
+                            var i = levels.indexOf(l)
+                            return i < 0 ? 1 : i
+                        }
+                        menu: ContextMenu {
+                            MenuItem { text: t("Sound and banner") }
+                            MenuItem { text: t("Silent") }
+                            MenuItem { text: t("As discreet as possible") }
+                        }
+                        onActivated: py.call("backend.set_level", [levels[index]], function(r) {
+                            app.message = t("Request sent to the Android app.")
+                            app.refresh()
+                        })
                     }
 
                     TextSwitch {

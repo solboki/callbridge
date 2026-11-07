@@ -38,6 +38,9 @@ LOOKUP_CONTACTS=1
 # to receive the notification; some watch apps then also remove it from the
 # watch.
 HIDE_ECHO=0
+# Remove from Sailfish the permanent "Callbridge is running" notification of the
+# Android relay (1 = yes). Safe: Android refuses to cancel it.
+HIDE_SERVICE_NOTIFICATION=1
 ECHO_DELAY=20
 # Other app names under which these copies may appear, if not recognised.
 # Run  callbridge-daemon --debug  to see the exact name ("Notify app=...").

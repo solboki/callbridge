@@ -1,5 +1,5 @@
 Name:           callbridge
-Version:        1.8.1
+Version:        1.9.0
 Release:        1
 Summary:        Forwards native Sailfish OS calls and SMS to Android AppSupport
 License:        GPL-3.0-or-later
@@ -86,6 +86,10 @@ exit 0
 %{_datadir}/icons/hicolor/*/apps/callbridge.png
 
 %changelog
+* Sat Nov 07 2026 Boris Solodki <solboki@solodki.fr> - 1.9.0-1
+- Silent notifications on the phone by default; "On the phone" setting.
+- Permanent relay notification removed from the Sailfish events view.
+
 * Fri Nov 06 2026 Boris Solodki <solboki@solodki.fr> - 1.8.1-1
 - Fix empty "Forwarded apps" page.
 - Echo removal off by default (it cancelled notifications before the watch got them).

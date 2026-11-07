@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.0 (7 November 2026)
+
+Callbridge notifications are now silent on the phone. They were posted with a high priority, which AppSupport turned into a sound and a banner in Sailfish. A new "On the phone" setting chooses between "Silent" (default), "As discreet as possible" and "Sound and banner".
+
+The permanent "Callbridge is running" notification of the Android relay is removed from the Sailfish events view. It could not be dismissed, since Android marks it as ongoing.
+
 ## 1.8.1 (6 November 2026)
 
 Fixes the "Forwarded apps" page, which stayed empty: one of its properties was named after a built-in QML property and hid the whole page.

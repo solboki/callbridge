@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 
-VERSION = "1.8.1"
+VERSION = "1.9.0"
 
 # --------------------------------------------------------------------------
 # Configuration
@@ -64,6 +64,8 @@ DEFAULTS = {
     # AppSupport répercute la fermeture côté Android, ce qui annule la
     # notification avant que l'application de la montre l'ait transmise.
     "HIDE_ECHO": "0",
+    # Retirer de Sailfish la notification permanente « Callbridge actif »
+    "HIDE_SERVICE_NOTIFICATION": "1",
     # Délai avant de fermer la copie (secondes), si HIDE_ECHO=1
     "ECHO_DELAY": "20",
     # Autres noms sous lesquels la copie peut apparaître (séparés par des virgules)
@@ -772,7 +774,12 @@ def record_seen(app, category, sender, builtin):
                 dbg("seen-apps.json:", exc)
 
 
-_echo_calls = {}          # (expéditeur, numéro de série) -> heure de l'appel
+_echo_calls = {}          # (expéditeur, numéro de série) -> (heure, délai)
+
+# Titre de la notification permanente du relais Android. Android la marque
+# « en cours » : il refuse de l'annuler, si bien que la retirer de Sailfish
+# est sans effet sur le relais. Elle encombrait la page des événements.
+RUNNING_TITLES = {"callbridge is running", "callbridge actif"}
 _echo_lock = threading.Lock()
 
 
@@ -781,14 +788,9 @@ def is_echo(app_name):
     return str(app_name).strip().lower() in names
 
 
-def close_notification(nid):
+def close_notification(nid, delay):
     def run():
-        # Laisser à l'application de la montre le temps de transmettre la
-        # notification : la fermer ici l'annule aussi côté Android.
-        try:
-            time.sleep(max(0.4, float(CFG.get("ECHO_DELAY", "20"))))
-        except ValueError:
-            time.sleep(20)
+        time.sleep(max(0.4, delay))
         code = subprocess.call(
             ["dbus-send", "--session", "--type=method_call",
              "--dest=org.freedesktop.Notifications",
@@ -807,12 +809,13 @@ def on_notify_return(header, args):
     key = (header["destination"], header["reply_serial"])
     with _echo_lock:
         now = time.time()
-        for k in [k for k, t in _echo_calls.items() if now - t > 10]:
+        for k in [k for k, v in _echo_calls.items() if now - v[0] > 10]:
             del _echo_calls[k]
-        if _echo_calls.pop(key, None) is None:
+        entry = _echo_calls.pop(key, None)
+        if entry is None:
             return
     if args and isinstance(args[0], int) and args[0] > 0:
-        close_notification(args[0])
+        close_notification(args[0], entry[1])
 
 
 def on_session(header, args):
@@ -825,9 +828,21 @@ def on_session(header, args):
 def on_notify(header, args):
     if header["type"] != "method call" or header["member"] != "Notify":
         return
-    if args and is_echo(args[0]) and CFG["HIDE_ECHO"] == "1":
-        with _echo_lock:
-            _echo_calls[(header["sender"], header["serial"])] = time.time()
+    if args and is_echo(args[0]):
+        summary0 = str(args[3]).strip().lower() if len(args) > 3 else ""
+        delay = None
+        if summary0 in RUNNING_TITLES and CFG["HIDE_SERVICE_NOTIFICATION"] == "1":
+            delay = 0.4
+        elif CFG["HIDE_ECHO"] == "1":
+            # Laisser à l'application de la montre le temps de la transmettre :
+            # la fermer ici l'annule aussi côté Android.
+            try:
+                delay = float(CFG.get("ECHO_DELAY", "20"))
+            except ValueError:
+                delay = 20.0
+        if delay is not None:
+            with _echo_lock:
+                _echo_calls[(header["sender"], header["serial"])] = (time.time(), delay)
     if len(args) < 7:
         dbg("Notify incomplet:", args)
         return

@@ -259,6 +259,7 @@ public class RelayService extends Service {
             st.put("notifications", Notifier.enabled(ctx));
             st.put("storage", granted(ctx, "android.permission.WRITE_EXTERNAL_STORAGE"));
             st.put("contacts", granted(ctx, "android.permission.READ_CONTACTS"));
+            st.put("level", Notifier.level(ctx));
             st.put("last_event", lastEventAt);
             st.put("recent", new org.json.JSONArray(recentLines()));
             st.put("ts", System.currentTimeMillis());

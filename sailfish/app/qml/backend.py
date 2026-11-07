@@ -335,3 +335,11 @@ def forget_seen():
         _systemctl("restart", SERVICE)
     return {"ok": True, "message": ""}
 
+
+
+def set_level(level):
+    """How Callbridge notifications behave on the phone (high, low, min)."""
+    if level not in ("high", "low", "min"):
+        return {"ok": False, "message": level}
+    _drop({"action": "command", "command": "set-level", "level": level})
+    return {"ok": True, "message": ""}

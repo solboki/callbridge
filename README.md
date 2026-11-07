@@ -112,11 +112,15 @@ When AppSupport stops, Android force-stops all its apps. An app stopped this way
 
 The Sailfish service therefore watches the status file of the Android relay. If Android is running but the relay has stopped answering, it opens the Android app with an "autostart" mark: the app starts its relay and closes at once. You may see a window flash briefly. The service tries at most three times per Android start, five minutes apart, so that a missing permission cannot cause endless attempts. This can be turned off with `AUTOSTART_ANDROID=0` in the settings file.
 
-## Duplicates in the notification area
+## Callbridge notifications on the phone
 
-AppSupport copies every Android notification into the Sailfish notification area. Each SMS or call forwarded by Callbridge therefore appears there twice: once from the native app, once from Callbridge.
+AppSupport copies every Android notification into the Sailfish notification area. Each SMS or call forwarded by Callbridge therefore also appears there, next to the native one.
 
-Callbridge can remove these copies (`HIDE_ECHO=1` in the settings file), but this is off by default. AppSupport passes the removal on to Android, which cancels the original notification. Removed at once, the notification never reached the watch. The service therefore waits `ECHO_DELAY` seconds (20 by default) before removing the copy. Even then, some watch apps also remove the notification from the watch when it is cancelled on the phone. Try it, and turn it back off if notifications vanish from your watch.
+The "On the phone" setting of the settings app decides how these copies behave. **Silent**, the default, keeps them quiet: no sound and no banner. **As discreet as possible** goes further, and may keep them out of the events view, depending on the Sailfish version. **Sound and banner** restores the previous behaviour. The watch receives the notification in every case, unless your watch app skips the quietest notifications: check with the test button after changing this setting.
+
+The permanent "Callbridge is running" notification of the Android relay is removed from Sailfish automatically (`HIDE_SERVICE_NOTIFICATION=0` keeps it). This is safe, because Android refuses to cancel it.
+
+Removing the copies of SMS and calls altogether is possible (`HIDE_ECHO=1`), but not recommended. AppSupport passes the removal on to Android, which cancels the original notification. The service therefore waits `ECHO_DELAY` seconds (20 by default), and some watch apps still remove the notification from the watch at that point.
 
 ## Advanced settings
 
