@@ -61,14 +61,15 @@ async def main():
     bus.export("/ril_0/voicecall01", call)
     await asyncio.sleep(2.5)
     from dbus_next import Message
-    async def notify(app, summ, body, cat):
+    async def notify(app, summ, body, cat, extra=None):
+        hints = {"category": Variant("s", cat),
+                 "x-nemo-priority": Variant("i", 120)}
+        hints.update(extra or {})
         await bus.call(Message(destination="org.freedesktop.Notifications",
             path="/org/freedesktop/Notifications",
             interface="org.freedesktop.Notifications", member="Notify",
             signature="susssasa{sv}i",
-            body=[app, 0, "icon", summ, body, ["default", ""],
-                  {"category": Variant("s", cat),
-                   "x-nemo-priority": Variant("i", 120)}, -1]))
+            body=[app, 0, "icon", summ, body, ["default", ""], hints, -1]))
     msg = 'Salut, ça va ?\nOn dit "midi" ou "13h" ? (test) [ok] {x}'
     await notify("commhistoryd", 'Jean "JD" Dupont', msg, "x-nemo.messaging.sms")
     await notify("commhistoryd", 'Jean "JD" Dupont', msg, "x-nemo.messaging.sms")
@@ -77,7 +78,10 @@ async def main():
     await notify("Messages", "Alice Martin", "Essai3", "")
     await notify("Callbridge", "Alice Martin", "Essai3 echo", "")
     await notify("Callbridge Android", "Alice Martin", "Essai3 echo 2", "")
-    await notify("Callbridge", "Callbridge is running", "Forwarding calls and SMS to your watch", "")
+    # Copy as apkd-bridge posts it, under an app label the service does not know
+    await notify("Relay", "Alice Martin", "Essai3 echo 3", "chat",
+                 {"x-nemo-origin-package": Variant("s", "org.callbridge.relay"),
+                  "x-nemo-owner": Variant("s", "apkd-bridge")})
     await notify("Mail", "Bob", "Meeting moved to 3 pm", "x-nemo.email")
     await notify("Weather", "Rain", "Rain expected at 5 pm", "")
     # known incoming call then answered; private call then hung up;

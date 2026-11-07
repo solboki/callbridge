@@ -1,5 +1,5 @@
 Name:           callbridge
-Version:        1.9.1
+Version:        1.10.0
 Release:        1
 Summary:        Forwards native Sailfish OS calls and SMS to Android AppSupport
 License:        GPL-3.0-or-later
@@ -42,6 +42,8 @@ install -D -m 0755 sailfish/callbridge-daemon %{buildroot}%{_bindir}/callbridge-
 install -D -m 0644 sailfish/callbridge.service %{buildroot}%{_prefix}/lib/systemd/user/callbridge.service
 mkdir -p %{buildroot}%{_prefix}/lib/systemd/user/user-session.target.wants
 ln -s ../callbridge.service %{buildroot}%{_prefix}/lib/systemd/user/user-session.target.wants/callbridge.service
+# AppSupport denylist: keeps Callbridge notifications out of Sailfish
+install -D -m 0644 sailfish/95-callbridge.conf %{buildroot}%{_sysconfdir}/appsupport.conf.d/95-callbridge.conf
 install -D -m 0644 sailfish/callbridge.conf.example %{buildroot}%{_datadir}/callbridge/callbridge.conf.example
 install -D -m 0644 android/Callbridge.apk %{buildroot}%{_datadir}/callbridge/Callbridge-%{version}.apk
 install -D -m 0644 README.md %{buildroot}%{_datadir}/callbridge/README.md
@@ -75,6 +77,7 @@ exit 0
 
 %files
 %{_bindir}/callbridge-daemon
+%config(noreplace) %{_sysconfdir}/appsupport.conf.d/95-callbridge.conf
 %{_prefix}/lib/systemd/user/callbridge.service
 %{_prefix}/lib/systemd/user/user-session.target.wants/callbridge.service
 %dir %{_datadir}/callbridge
@@ -86,6 +89,11 @@ exit 0
 %{_datadir}/icons/hicolor/*/apps/callbridge.png
 
 %changelog
+* Sat Nov 07 2026 Boris Solodki <solboki@solodki.fr> - 1.10.0-1
+- AppSupport denylist for Callbridge: no sound, banner or event in Sailfish.
+- Removed the "On the phone" level and the closing of copies.
+- Android relay waits for files that are still being written.
+
 * Sat Nov 07 2026 Boris Solodki <solboki@solodki.fr> - 1.9.1-1
 - Fix settings app main screen ("On the phone" selector handler).
 

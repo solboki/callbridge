@@ -197,8 +197,26 @@ public class RelayService extends Service {
                 continue;
             }
             File f = new File(dir, name);
+            // A writer that does not rename an atomic temporary file (a test
+            // with "echo > file", for instance) is caught between creating the
+            // file and filling it: leave a young empty or partial file for the
+            // next pass instead of discarding it.
+            boolean young = System.currentTimeMillis() - f.lastModified() < 5000;
+            String content;
             try {
-                JSONObject ev = new JSONObject(read(f));
+                content = read(f);
+                if (content.trim().length() == 0 && young) {
+                    continue;
+                }
+                new JSONObject(content);
+            } catch (Exception e) {
+                if (young) {
+                    continue;
+                }
+                content = "";
+            }
+            try {
+                JSONObject ev = new JSONObject(content);
                 if (Notifier.handle(this, ev)) {
                     addRecent(ev);
                     writeState(this);
@@ -259,7 +277,6 @@ public class RelayService extends Service {
             st.put("notifications", Notifier.enabled(ctx));
             st.put("storage", granted(ctx, "android.permission.WRITE_EXTERNAL_STORAGE"));
             st.put("contacts", granted(ctx, "android.permission.READ_CONTACTS"));
-            st.put("level", Notifier.level(ctx));
             st.put("last_event", lastEventAt);
             st.put("recent", new org.json.JSONArray(recentLines()));
             st.put("ts", System.currentTimeMillis());

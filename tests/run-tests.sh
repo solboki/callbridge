@@ -25,7 +25,7 @@ EOF
 
 # The user chose to forward "Mail", but not "Weather"
 mkdir -p "$WORK/home/.config/callbridge"
-echo '{"apps": ["Mail"]}' > "$WORK/home/.config/callbridge/apps.json"
+echo '{"apps": ["Mail", "Relay"]}' > "$WORK/home/.config/callbridge/apps.json"
 
 BUS=$(dbus-daemon --session --fork --print-address=1 --print-pid=1)
 export DBUS_SESSION_BUS_ADDRESS=$(printf '%s\n' "$BUS" | sed -n 1p)
@@ -55,7 +55,7 @@ check "SMS with category, quotes and line break" \
 check "duplicate SMS ignored" '"title": "Jean \"JD\" Dupont"' 1
 check "missed call with category" '"title": "Appel manqué", "text": "Marie"'
 check "SMS without category posted as Messages" '"title": "Alice Martin", "text": "Essai3"'
-check "Callbridge echo ignored" 'Essai3 echo' 0
+check "Callbridge echo ignored (by name or origin package)" 'Essai3 echo' 0
 check "notification of another category ignored" 'Ignore' 0
 check "incoming call with name found in address book" \
       '"title": "Jean Dupont", "text": "Appel entrant · +33612345678"'
@@ -74,9 +74,14 @@ check "SMS and phone apps flagged as built-in" '"builtin": true' 2
 check "no notification content stored in the list" 'Rain expected' 0
 
 ALL=$(cat "$WORK/closed.log" 2>/dev/null)
-check "only the permanent relay notification closed by default" 'Callbridge' 1
+check "no notification is ever closed in Sailfish" 'Callbridge' 0
 check "native notifications left alone" 'commhistoryd' 0
-check "native notifications left alone (Messages)" 'Messages' 0
+
+# AppSupport denylist shipped by the package: must stay byte-identical to the
+# file users may have created by hand, so that rpm takes it over silently.
+ALL=$(cat "$HERE/../sailfish/95-callbridge.conf")
+check "denylist in the [Notifications] section" '[Notifications]'
+check "denylist names the Callbridge package" 'NotifDenylist=org.callbridge.relay'
 
 # QML: a page property named after a built-in one (data, children...) hides
 # everything the page contains, and qmllint does not notice it.

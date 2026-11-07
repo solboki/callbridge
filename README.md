@@ -80,11 +80,13 @@ Then check the line "Notifications allowed". If it says "NO", tap "Notification 
 
 Finally, tap "Don't optimise battery" and exempt Callbridge, so that Android does not put it to sleep.
 
-**4. Set up Garmin Connect.** In Garmin Connect's notification settings, allow the "Callbridge" app.
+**4. Restart AppSupport.** This applies the setting that keeps Callbridge's notifications from ringing a second time in Sailfish (see "No duplicates on the phone"). As root (`devel-su`), run `systemctl restart appsupport@defaultuser`, then open Garmin Connect again if needed.
 
-**5. Check.** Back in the Callbridge settings app, the "Android relay" section should show "Active" and "Notifications allowed: yes". Tap "Send test notification": it should reach your watch within a few seconds. Then send yourself a text message from another phone.
+**5. Set up Garmin Connect.** In Garmin Connect's notification settings, allow the "Callbridge" app.
 
-**6. Hide the Android icon (optional).** Once everything works, you can turn on "Hide Android app icon" in the settings app. The Android app keeps running; only its "Callbridge Android" icon disappears from the launcher. "Open Android app" in the settings app still opens it.
+**6. Check.** Back in the Callbridge settings app, the "Android relay" section should show "Active" and "Notifications allowed: yes". Tap "Send test notification": it should reach your watch within a few seconds. Then send yourself a text message from another phone.
+
+**7. Hide the Android icon (optional).** Once everything works, you can turn on "Hide Android app icon" in the settings app. The Android app keeps running; only its "Callbridge Android" icon disappears from the launcher. "Open Android app" in the settings app still opens it.
 
 ## The settings app
 
@@ -112,15 +114,26 @@ When AppSupport stops, Android force-stops all its apps. An app stopped this way
 
 The Sailfish service therefore watches the status file of the Android relay. If Android is running but the relay has stopped answering, it opens the Android app with an "autostart" mark: the app starts its relay and closes at once. You may see a window flash briefly. The service tries at most three times per Android start, five minutes apart, so that a missing permission cannot cause endless attempts. This can be turned off with `AUTOSTART_ANDROID=0` in the settings file.
 
-## Callbridge notifications on the phone
+## No duplicates on the phone
 
-AppSupport copies every Android notification into the Sailfish notification area. Each SMS or call forwarded by Callbridge therefore also appears there, next to the native one.
+Left alone, AppSupport would copy every Callbridge notification into the Sailfish notification area: each SMS or call would ring twice and show two banners, one from the native app and one from Callbridge.
 
-The "On the phone" setting of the settings app decides how these copies behave. **Silent**, the default, keeps them quiet: no sound and no banner. **As discreet as possible** goes further, and may keep them out of the events view, depending on the Sailfish version. **Sound and banner** restores the previous behaviour. The watch receives the notification in every case, unless your watch app skips the quietest notifications: check with the test button after changing this setting.
+The package prevents this with a setting of AppSupport itself. It installs the file `/etc/appsupport.conf.d/95-callbridge.conf`, which puts Callbridge on the notification denylist of AppSupport's bridge:
 
-The permanent "Callbridge is running" notification of the Android relay is removed from Sailfish automatically (`HIDE_SERVICE_NOTIFICATION=0` keeps it). This is safe, because Android refuses to cancel it.
+```
+[Notifications]
+NotifDenylist=org.callbridge.relay
+```
 
-Removing the copies of SMS and calls altogether is possible (`HIDE_ECHO=1`), but not recommended. AppSupport passes the removal on to Android, which cancels the original notification. The service therefore waits `ECHO_DELAY` seconds (20 by default), and some watch apps still remove the notification from the watch at that point.
+The bridge then never copies Callbridge's notifications into Sailfish: no sound, no banner, no entry in the events view. On the Android side, the notification is left untouched, so the watch app still forwards it.
+
+AppSupport reads this file when it starts. **After installing or updating Callbridge for the first time, restart AppSupport** (or the phone). As root (`devel-su`):
+
+```
+systemctl restart appsupport@defaultuser
+```
+
+Restarting AppSupport closes all Android apps, including the watch app: open it again afterwards if it does not reconnect on its own. The Callbridge relay restarts by itself within two minutes. The settings app shows whether the denylist is installed ("Copies in Sailfish: Blocked").
 
 ## Advanced settings
 

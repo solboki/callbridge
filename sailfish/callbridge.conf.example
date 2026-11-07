@@ -31,21 +31,6 @@ LANGUAGE=
 # Look up the caller's name in the address book (1 = yes)
 LOOKUP_CONTACTS=1
 
-# Remove from the Sailfish notification area the copies AppSupport makes of
-# Callbridge's notifications (1 = yes). OFF by default: AppSupport passes the
-# removal on to Android, which cancels the notification before the watch app
-# has forwarded it. If you turn it on, keep a delay long enough for the watch
-# to receive the notification; some watch apps then also remove it from the
-# watch.
-HIDE_ECHO=0
-# Remove from Sailfish the permanent "Callbridge is running" notification of the
-# Android relay (1 = yes). Safe: Android refuses to cancel it.
-HIDE_SERVICE_NOTIFICATION=1
-ECHO_DELAY=20
-# Other app names under which these copies may appear, if not recognised.
-# Run  callbridge-daemon --debug  to see the exact name ("Notify app=...").
-ECHO_APPS=
-
 # Wake the Android relay when it stops answering while Android runs (1 = yes).
 # After AppSupport restarts, Android only restarts apps that were opened by
 # hand; the service opens Callbridge silently instead.

@@ -256,11 +256,6 @@ public class MainActivity extends Activity {
                     .append(yes(checkSelfPermission(PERMS[2]) == PackageManager.PERMISSION_GRANTED))
                     .append('\n');
         }
-        String lv = Notifier.level(this);
-        sb.append(L.t("On the phone: ", "Sur le téléphone : ")).append(
-                Notifier.LEVEL_HIGH.equals(lv) ? L.t("sound and banner", "son et bannière")
-                        : Notifier.LEVEL_MIN.equals(lv) ? L.t("as discreet as possible", "le plus discret possible")
-                        : L.t("silent", "silencieuses")).append('\n');
         if (!RelayService.recent.isEmpty()) {
             sb.append(L.t("Recent events (delay):", "Derniers événements (délai) :")).append('\n');
             for (String line : RelayService.recentLines()) {

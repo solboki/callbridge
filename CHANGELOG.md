@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.0 (7 November 2026)
+
+No more duplicate notifications on the phone, for good. The package now installs `/etc/appsupport.conf.d/95-callbridge.conf`, which puts Callbridge on the notification denylist of AppSupport's bridge. The bridge no longer copies Callbridge's notifications into Sailfish: no second sound, no banner, no entry in the events view. The watch still receives them, since the notification is untouched on the Android side. AppSupport must be restarted once for this to apply. The settings app shows whether the denylist is installed.
+
+This replaces two earlier attempts, now removed: closing the copies in Sailfish (1.7.0), which also cancelled the notification before the watch got it, and lowering the notification priority (1.9.0), which Sailfish ignored and which Garmin Connect took as a reason to skip the notification. Notifications are posted with high priority again.
+
+The Android relay no longer discards a file that is still being written.
+
+Thanks to the author's tests on his phone, which found the denylist inside AppSupport's bridge.
+
 ## 1.9.1 (7 November 2026)
 
 Fixes the settings app of 1.9.0, whose main screen could fail to load: the handler of the new "On the phone" selector was attached to the selector instead of its menu.

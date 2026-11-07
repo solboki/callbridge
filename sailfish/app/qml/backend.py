@@ -22,6 +22,7 @@ DISABLED_FLAG = os.path.join(CONF_DIR, "disabled")
 APK_GLOB = "/usr/share/callbridge/Callbridge-*.apk"
 ANDROID_PACKAGE = "org.callbridge.relay"
 ICON_FLAG = os.path.join(CONF_DIR, "android-icon-hidden")
+DENYLIST_FILE = "/etc/appsupport.conf.d/95-callbridge.conf"
 OVERRIDE_MARK = "# Callbridge override"   # copies written by the service, not launchers
 DESKTOP_DIRS = ["/usr/share/applications",
                 os.path.expanduser("~/.local/share/applications")]
@@ -139,6 +140,8 @@ def status():
         "apkVersion": os.path.basename(apk)[len("Callbridge-"):-len(".apk")] if apk else "",
         "androidLauncher": _android_desktop(),
         "iconHidden": os.path.exists(ICON_FLAG),
+        # AppSupport denylist installed by the package: no copies in Sailfish
+        "denylisted": os.path.exists(DENYLIST_FILE),
     }
 
 
@@ -336,10 +339,3 @@ def forget_seen():
     return {"ok": True, "message": ""}
 
 
-
-def set_level(level):
-    """How Callbridge notifications behave on the phone (high, low, min)."""
-    if level not in ("high", "low", "min"):
-        return {"ok": False, "message": level}
-    _drop({"action": "command", "command": "set-level", "level": level})
-    return {"ok": True, "message": ""}

@@ -42,43 +42,6 @@ final class Notifier {
         }
     }
 
-    // ------------------------------------------------------------------
-    // How loud the notification is on the phone
-    //
-    // AppSupport copies every Android notification into Sailfish and derives
-    // sound and banner from its priority. For an app targeting API 25,
-    // Android also derives the notification's importance from that priority:
-    //   high -> sound and banner, low -> silent, min -> silent and folded.
-    // The watch app reads the notification on the Android side whatever its
-    // priority, but some watch apps skip the quietest ones: hence a setting.
-    // ------------------------------------------------------------------
-
-    static final String LEVEL_HIGH = "high";
-    static final String LEVEL_LOW = "low";
-    static final String LEVEL_MIN = "min";
-
-    static String level(Context ctx) {
-        return ctx.getSharedPreferences("callbridge", Context.MODE_PRIVATE)
-                .getString("level", LEVEL_LOW);
-    }
-
-    static void setLevel(Context ctx, String level) {
-        if (!LEVEL_HIGH.equals(level) && !LEVEL_LOW.equals(level) && !LEVEL_MIN.equals(level)) {
-            return;
-        }
-        ctx.getSharedPreferences("callbridge", Context.MODE_PRIVATE).edit()
-                .putString("level", level).apply();
-    }
-
-    @SuppressWarnings("deprecation")
-    static int priority(Context ctx) {
-        String l = level(ctx);
-        if (LEVEL_HIGH.equals(l)) {
-            return Notification.PRIORITY_HIGH;
-        }
-        return LEVEL_MIN.equals(l) ? Notification.PRIORITY_MIN : Notification.PRIORITY_LOW;
-    }
-
     static int idFor(String key) {
         return 1000 + (key.hashCode() & 0x3fffffff) % 1000000;
     }
@@ -97,9 +60,6 @@ final class Notifier {
             String cmd = ev.optString("command", "");
             if ("uninstall".equals(cmd)) {
                 RelayService.requestUninstall(ctx);
-            } else if ("set-level".equals(cmd)) {
-                setLevel(ctx, ev.optString("level", LEVEL_LOW));
-                RelayService.writeState(ctx);
             } else {
                 RelayService.writeState(ctx);
             }
@@ -175,7 +135,11 @@ final class Notifier {
                 .setShowWhen(true)
                 // Le téléphone sonne déjà via Sailfish : pas de son en double.
                 .setDefaults(0)
-                .setPriority(priority(ctx))
+                // High priority: Garmin Connect skips quieter notifications.
+                // On the Sailfish side, AppSupport's denylist (installed by the
+                // RPM in /etc/appsupport.conf.d/95-callbridge.conf) keeps them
+                // from ringing or showing a banner.
+                .setPriority(Notification.PRIORITY_HIGH)
                 .setOnlyAlertOnce(true)
                 .setVisibility(Notification.VISIBILITY_PRIVATE);
 
